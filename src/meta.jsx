@@ -17,7 +17,7 @@ const MetaContext = createContext(DEFAULT_META);
 export function MetaProvider({ children }) {
   const [meta, setMeta] = useState(DEFAULT_META);
   useEffect(() => {
-    api("/api/meta").then((r) => r.data && setMeta({ ...DEFAULT_META, ...r.data })).catch(() => {});
+    api("/api/meta").then((r) => r.data && setMeta({ ...DEFAULT_META, ...r.data, loaded: true })).catch(() => {});
   }, []);
   return <MetaContext.Provider value={meta}>{children}</MetaContext.Provider>;
 }

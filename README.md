@@ -48,3 +48,7 @@ Full endpoint list: `API.md` in the backend project.
 - "Manage shop" / "Manage jobs" opens the real shop-owner / delivery workspace as that account (banner "Admin mode", button "Back to admin").
 - Shop workspace: payout account, payout requests, settlement detail, CSV, ad placements and stats, Help. Delivery workspace: Earnings tab (fees, COD, settlements, payout account), Help.
 - Customers: /support page (Help) and storefront announcement banner.
+
+## v5.1
+- Delivery partners get a free map per job ("Show map & route"): OpenStreetMap tiles, Nominatim address lookup, OSRM route + distance/time, "Navigate" buttons (Google Maps / OSM), their own position, and tap-to-place pins when an address can't be found. No API keys. **Run `npm install` – adds `leaflet`.**
+- Shop owners can assign / change / unassign delivery partners on their orders when the admin allows it (Settings toggle, plus a per-shop override on the Shops page).

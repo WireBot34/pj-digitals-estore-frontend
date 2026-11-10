@@ -125,6 +125,15 @@ function ShopOrders({ token, tell }) {
   const [status, setStatus] = useState("");
   const { data, pagination, loading, reload } = useList("/api/shop/orders", { page, limit: 10, status }, token, tell);
   const [busyId, setBusyId] = useState("");
+  const [canAssign, setCanAssign] = useState(false);
+  const [dispatchInfo, setDispatchInfo] = useState(""); // why the assign button is hidden
+  const [assigning, setAssigning] = useState(null);
+  useEffect(() => { (async () => { try { const sh = (await api("/api/shop/me", { token: await token() })).data; setCanAssign(!!sh?.canAssignDrivers); setDispatchInfo(sh?.canAssignDrivers === undefined ? "Your server is out of date (needs v4.1) so driver assignment isn't available yet." : sh.canAssignDrivers ? "" : sh.canAssignDriversOverride === false ? "The store team has switched off driver assignment for your shop; they will dispatch your orders." : "Driver assignment is switched off by the store team; they will dispatch your orders."); } catch { /* optional */ } })(); }, [token]);
+  const unassign = async (o) => {
+    if (!confirm(`Take ${o.delivery?.driver?.fullName || "the driver"} off ${o.orderNumber}?`)) return;
+    setBusyId(o._id);
+    try { await api(`/api/shop/orders/${o._id}/unassign`, { token: await token(), method: "PUT" }); tell("Driver unassigned."); await reload(); } catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
+  };
 
   const setOrder = async (o, orderStatus) => {
     if (orderStatus === "cancelled" && !confirm(`Cancel order ${o.orderNumber}? The customer will be notified.`)) return;
@@ -145,7 +154,9 @@ function ShopOrders({ token, tell }) {
           <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">{o.items.map((it, i) => <div key={i} className="flex justify-between gap-3 text-sm"><span>{it.name}{it.size ? ` (${it.size})` : ""} × {it.quantity}</span><span className="font-semibold">{money(it.price * it.quantity)}</span></div>)}
             <div className="flex justify-between border-t border-slate-100 pt-2 font-extrabold"><span>Order value</span><span>{money(o.subtotal)}</span></div></div>
           <div className="mt-4 grid gap-4 text-sm sm:grid-cols-2"><div><p className="label">Deliver to</p><p className="mt-1 text-slate-700">{addressLine(o.shippingAddress)}</p>{o.shippingAddress?.phone && <p className="mt-1 text-slate-500">Phone: {o.shippingAddress.phone}</p>}{o.notes && <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Note: {o.notes}</p>}</div>
-            <div><p className="label">Delivery</p>{d ? <><p className="mt-1 font-semibold capitalize">{prettify(d.status)}</p><p className="text-slate-600">{d.driver ? `${d.driver.fullName}${d.driver.phone ? ` · ${d.driver.phone}` : ""}` : "Driver not assigned"}</p></> : <p className="mt-1 text-slate-500">A delivery partner will be assigned soon.</p>}</div></div>
+            <div><p className="label">Delivery</p>{d ? <><p className="mt-1 font-semibold capitalize">{prettify(d.status)}</p><p className="text-slate-600">{d.driver ? `${d.driver.fullName}${d.driver.phone ? ` · ${d.driver.phone}` : ""}` : "Driver not assigned"}</p></> : <p className="mt-1 text-slate-500">{canAssign ? "No delivery partner yet." : "A delivery partner will be assigned soon."}</p>}
+              {!canAssign && dispatchInfo && !d && ["placed", "processing"].includes(o.orderStatus) && <p className="mt-1 text-xs text-slate-400">{dispatchInfo}</p>}
+              {canAssign && ["placed", "processing"].includes(o.orderStatus) && (!d || ["assigned", "accepted", "rejected", "failed", "cancelled"].includes(d.status)) && <div className="mt-2 flex flex-wrap gap-2"><button disabled={busyId === o._id} onClick={() => setAssigning(o)} className="btn-primary px-3 py-2 text-xs">{d && d.driver && !["rejected", "failed", "cancelled"].includes(d.status) ? "Change driver" : "Assign driver"}</button>{d && ["assigned", "accepted"].includes(d.status) && <button disabled={busyId === o._id} onClick={() => unassign(o)} className="btn-secondary px-3 py-2 text-xs text-red-600">Unassign</button>}</div>}</div></div>
           {["placed", "processing"].includes(o.orderStatus) && <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
             {o.orderStatus === "placed" && <button disabled={busyId === o._id} onClick={() => setOrder(o, "processing")} className="btn-primary">Accept order</button>}
             {o.orderStatus === "processing" && <p className="self-center text-sm text-slate-500">Pack the order — the delivery partner will pick it up.</p>}
@@ -153,7 +164,36 @@ function ShopOrders({ token, tell }) {
         </article>;
       })}</div>}
     <Pager pagination={pagination} onPage={setPage}/>
+    {assigning && <AssignDriverModal order={assigning} token={token} tell={tell} close={() => setAssigning(null)} done={() => { setAssigning(null); reload(); }}/>}
   </>;
+}
+
+function AssignDriverModal({ order, token, tell, close, done }) {
+  const [drivers, setDrivers] = useState(null);
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [everywhere, setEverywhere] = useState(false);
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    let live = true; setDrivers(null);
+    (async () => {
+      try { const r = await api(`/api/shop/drivers?available=${onlineOnly}&all=${everywhere}&search=${encodeURIComponent(search)}`, { token: await token() }); if (live) setDrivers(r.data || []); }
+      catch (e) { tell(e.message, "error"); if (live) setDrivers([]); }
+    })();
+    return () => { live = false; };
+  }, [onlineOnly, everywhere, search, token, tell]);
+  const pick = async (d) => {
+    setBusy(d._id);
+    try { await api(`/api/shop/orders/${order._id}/assign`, { token: await token(), method: "POST", body: { driverId: d._id } }); tell(`${d.fullName} assigned to ${order.orderNumber}.`); done(); }
+    catch (e) { tell(e.message, "error"); } finally { setBusy(""); }
+  };
+  return <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-slate-950/50 p-4"><div className="my-8 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+    <div className="flex items-start justify-between"><div><h2 className="text-xl font-extrabold">Choose a delivery partner</h2><p className="mt-1 text-xs text-slate-500">Order {order.orderNumber}. They'll be notified straight away.</p></div><button onClick={close}>✕</button></div>
+    <input className="input mt-4 w-full" placeholder="Search name, phone or vehicle number" value={search} onChange={(e) => setSearch(e.target.value)}/>
+    <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-slate-600"><label className="flex items-center gap-2"><input type="checkbox" checked={onlineOnly} onChange={(e) => setOnlineOnly(e.target.checked)}/> Online only</label><label className="flex items-center gap-2"><input type="checkbox" checked={everywhere} onChange={(e) => setEverywhere(e.target.checked)}/> Include other areas</label></div>
+    <div className="mt-4 max-h-80 space-y-2 overflow-y-auto">{drivers === null ? <Loading/> : !drivers.length ? <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-800">No delivery partners found. Try “Include other areas”.</p> : drivers.map((d) => <div key={d._id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+      <div className="min-w-0"><p className="truncate font-bold">{d.fullName} <Pill tone={d.isAvailable ? "green" : "gray"}>{d.isAvailable ? "online" : "offline"}</Pill></p><p className="text-xs text-slate-500">{d.phone} · {prettify(d.vehicleType)}{d.vehicleNumber ? ` ${d.vehicleNumber}` : ""} · {d.activeJobs} active job{d.activeJobs === 1 ? "" : "s"}</p></div>
+      <button disabled={!!busy} onClick={() => pick(d)} className="btn-primary px-3 py-2 text-xs">{busy === d._id ? "..." : "Assign"}</button></div>)}</div></div></div>;
 }
 
 /* ------------------------------------------------------------------- Ads */

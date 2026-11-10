@@ -75,7 +75,7 @@ export function ShopsAdmin({ token, tell, manage }) {
 
 function ShopModal({ shop, token, tell, close, done }) {
   const meta = useMeta();
-  const [f, setF] = useState({ ownerEmail: "", name: shop?.name || "", phone: shop?.phone || "", email: shop?.email || "", location: shop?.location || meta.locations[0], addressLine: shop?.addressLine || "", landmark: shop?.landmark || "", openingHours: shop?.openingHours || "", description: shop?.description || "", categories: (shop?.categories || []).join(", "), commissionPct: shop?.commissionRate != null ? String(+(shop.commissionRate * 100).toFixed(2)) : "", adminNotes: shop?.adminNotes || "" });
+  const [f, setF] = useState({ ownerEmail: "", name: shop?.name || "", phone: shop?.phone || "", email: shop?.email || "", location: shop?.location || meta.locations[0], addressLine: shop?.addressLine || "", landmark: shop?.landmark || "", openingHours: shop?.openingHours || "", description: shop?.description || "", categories: (shop?.categories || []).join(", "), commissionPct: shop?.commissionRate != null ? String(+(shop.commissionRate * 100).toFixed(2)) : "", canAssign: shop?.canAssignDrivers === true ? "true" : shop?.canAssignDrivers === false ? "false" : "", adminNotes: shop?.adminNotes || "" });
   const [pay, setPay] = useState(shop?.payout || {});
   const [logo, setLogo] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +87,7 @@ function ShopModal({ shop, token, tell, close, done }) {
     try {
       const fd = new FormData();
       ["name", "phone", "email", "location", "addressLine", "landmark", "openingHours", "description", "categories", "adminNotes"].forEach((k) => fd.append(k, f[k]));
+      fd.append("canAssignDrivers", f.canAssign);
       fd.append("commissionRate", f.commissionPct === "" ? "" : String(Number(f.commissionPct) / 100));
       if (f.ownerEmail.trim()) fd.append("ownerEmail", f.ownerEmail.trim());
       if (pay.method) fd.append("payout", JSON.stringify(pay));
@@ -112,6 +113,7 @@ function ShopModal({ shop, token, tell, close, done }) {
       <Field label="Description"><textarea rows="2" className="input w-full" value={f.description} onChange={set("description")}/></Field>
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Custom commission (%)" hint="Leave empty to use the platform default."><input type="number" min="0" max="99" step="0.1" className="input w-full" value={f.commissionPct} onChange={set("commissionPct")}/></Field>
         <Field label="Logo"><label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{logo ? logo.name : "Choose image"}<input className="hidden" type="file" accept="image/*" onChange={(e) => setLogo(e.target.files?.[0] || null)}/></label></Field></div>
+      <Field label="Can this shop assign its own delivery partners?"><select className="input w-full" value={f.canAssign} onChange={set("canAssign")}><option value="">Follow the platform setting</option><option value="true">Yes, always allow</option><option value="false">No, admin dispatches for this shop</option></select></Field>
       <div><p className="label mb-2">Payout account</p><PayoutFields f={pay} set={setP}/></div>
       <Field label="Internal notes (never shown to the shop)"><textarea rows="2" className="input w-full" value={f.adminNotes} onChange={set("adminNotes")}/></Field>
       <div className="flex justify-end gap-3"><button type="button" onClick={close} className="btn-secondary">Cancel</button><button disabled={busy} className="btn-primary">{busy ? "Saving..." : shop ? "Save changes" : "Create shop"}</button></div>

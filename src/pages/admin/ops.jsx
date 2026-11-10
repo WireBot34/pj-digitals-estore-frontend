@@ -25,7 +25,8 @@ export function AdsAdmin({ token, tell }) {
     {loading ? <Loading/> : data.length ? <div className="grid gap-4 md:grid-cols-2">{data.map((ad) => {
       const ctr = ad.impressions ? ((ad.clicks / ad.impressions) * 100).toFixed(1) : "0.0";
       return <div key={ad._id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">{ad.image && <img src={ad.image} alt={ad.title} className="h-40 w-full object-cover"/>}
-        <div className="p-5"><div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{ad.title}</h3><Pill tone={statusTone(ad.status)}>{ad.status}</Pill></div>{ad.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{ad.description}</p>}
+        <div className="p-5"><div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{ad.title}</h3><Pill tone={statusTone(ad.status)}>{ad.status}</Pill></div>
+          {ad.liveState && (ad.liveState.live ? <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">● Live on the storefront</p> : <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"><p className="font-bold">Not showing to customers:</p><ul className="ml-4 list-disc">{ad.liveState.reasons.map((r) => <li key={r}>{r}</li>)}</ul></div>)}{ad.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{ad.description}</p>}
           <p className="mt-2 text-xs text-slate-400">{ad.shop?.name} · {ad.targetLocations?.length ? ad.targetLocations.join(", ") : "All locations"} · {day(ad.startsAt)}{ad.endsAt ? ` → ${day(ad.endsAt)}` : ""}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">{(ad.placements?.length ? ad.placements : ["home"]).map((p) => <span key={p} className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">{AD_PLACEMENT_LABELS[p] || p}</span>)}{ad.priority ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">Priority {ad.priority}</span> : null}</div>
           <p className="mt-3 text-xs text-slate-500">👁 {ad.impressions || 0} views · 👆 {ad.clicks || 0} clicks · CTR {ctr}%</p>
@@ -163,7 +164,7 @@ export function SettingsAdmin({ token, tell }) {
   const save = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
+      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
       await api("/api/admin/settings", { token: await token(), method: "PUT", body }); tell("Settings saved. Customers see changes within a minute."); await load();
     } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
   };
@@ -172,6 +173,7 @@ export function SettingsAdmin({ token, tell }) {
     <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6"><div className="grid gap-5 sm:grid-cols-2">
       {SETTING_FIELDS.map(([k, label, hint, type, attrs]) => <Field key={k} label={label} hint={hint}><input type={type} className="input w-full" value={s[k] ?? ""} onChange={set(k)} {...attrs}/></Field>)}
       <label className="flex items-center gap-3 self-end rounded-xl bg-slate-50 p-4 text-sm font-semibold"><input type="checkbox" checked={!!s.allowCod} onChange={set("allowCod")}/> Accept cash on delivery</label>
+      <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm font-semibold sm:col-span-2"><input className="mt-1" type="checkbox" checked={!!s.shopsCanAssignDrivers} onChange={set("shopsCanAssignDrivers")}/><span>Let shop owners assign delivery partners to their own orders<span className="block text-xs font-normal text-slate-500">When off, only admins dispatch. You can still allow or block individual shops from the Shops page.</span></span></label>
       <Field label="Storefront announcement" hint="Shown as a banner on every customer page. Leave empty to hide." className="sm:col-span-2"><input className="input w-full" value={s.announcement || ""} onChange={set("announcement")} placeholder="Festive offer: free delivery this weekend!"/></Field>
       <Field label="Support phone"><input className="input w-full" value={s.supportPhone || ""} onChange={set("supportPhone")}/></Field><Field label="Support email"><input className="input w-full" value={s.supportEmail || ""} onChange={set("supportEmail")}/></Field></div>
       <div className="mt-6 flex justify-end"><button disabled={busy} className="btn-primary">{busy ? "Saving..." : "Save settings"}</button></div></form>

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { MapPin, Navigation, Phone } from "lucide-react";
+import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Map as MapIcon, MapPin, Navigation, Phone } from "lucide-react";
 import { api, money } from "../api";
 import { SupportPanel } from "./SupportPanel";
 import { PayoutFields, Stat } from "./admin/common";
@@ -66,7 +66,10 @@ export function DeliveryWorkspace({ token, me, refreshMe, tell, exit }) {
   </WorkspaceFrame>;
 }
 
+const JobMap = lazy(() => import("../JobMap")); // Leaflet only loads when a driver opens a map
+
 function JobCard({ job, onAction, busy }) {
+  const [showMap, setShowMap] = useState(false);
   const o = job.order || {};
   const pickup = [job.pickup?.address, job.pickup?.location].filter(Boolean).join(", ");
   const drop = dropLine(job.drop);
@@ -79,6 +82,9 @@ function JobCard({ job, onAction, busy }) {
       <div className="rounded-xl bg-slate-50 p-4"><p className="label">2 · Deliver to</p><p className="mt-1 font-bold">{job.drop?.fullName || "Customer"}</p><p className="text-slate-600">{drop || "Address not provided"}</p>
         <div className="mt-3 flex flex-wrap gap-2">{job.drop?.phone && <a className="btn-secondary px-3 py-2 text-xs" href={`tel:${job.drop.phone}`}><Phone size={14}/> {job.drop.phone}</a>}{drop && <a className="btn-secondary px-3 py-2 text-xs" target="_blank" rel="noreferrer" href={mapLink(drop)}><MapPin size={14}/> Directions</a>}</div></div>
     </div>
+    {["assigned", "accepted", "picked_up", "on_the_way"].includes(job.status) && <>
+      <button onClick={() => setShowMap((v) => !v)} className="btn-secondary mt-4 px-3 py-2 text-xs"><MapIcon size={14}/> {showMap ? "Hide map" : "Show map & route"}</button>
+      {showMap && <Suspense fallback={<p className="mt-3 text-xs text-slate-400">Loading map…</p>}><JobMap job={job}/></Suspense>}</>}
     {Array.isArray(o.items) && o.items.length > 0 && <p className="mt-4 text-sm text-slate-600"><b className="text-slate-800">Items:</b> {o.items.map((i) => `${i.name}${i.size ? ` (${i.size})` : ""} × ${i.quantity}`).join(", ")}</p>}
     {job.codAmount > 0 && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">Collect {money(job.codAmount)} in cash from the customer</p>}
     {o.notes && <p className="mt-3 text-xs text-slate-500">Customer note: {o.notes}</p>}
