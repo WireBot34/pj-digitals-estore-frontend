@@ -8,7 +8,9 @@ React + Vite storefront and admin workspace for the PJ Digitals backend (Express
 
 **Admin workspace** (shown when `GET /api/admin/stats` succeeds) - dashboard, products (including inactive ones), orders with status updates, payments, shop and delivery-partner approvals, delivery assignment, ad moderation.
 
-Shop owners and delivery partners use their own mobile apps; this project doesn't include those screens.
+**Work with us** (`/partner`) - signed-in customers can apply to sell (`POST /api/shops/apply`) or deliver (`POST /api/delivery/apply`). A banner under the header shows the application status (pending, approved, rejected or suspended, with the admin's reason). Role and status come from `GET /api/me`.
+
+Approved shop owners and delivery partners do their daily work in their own mobile apps; this project doesn't include those screens.
 
 ## Setup
 
