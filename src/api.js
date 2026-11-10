@@ -27,3 +27,13 @@ export async function api(path, { token, method = "GET", body, headers = {} } = 
 export const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value || 0));
 export const imageOf = (images) => Array.isArray(images) ? (typeof images[0] === "string" ? images[0] : images[0]?.url || images[0]?.secure_url || "") : "";
 export const unwrap = (res, key = "data") => res?.[key] ?? res?.data ?? res;
+
+/** Builds "?a=1&b=2" from an object, skipping empty values. Returns "" when nothing is set. */
+export const qs = (params = {}) => {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+};

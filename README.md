@@ -1,94 +1,37 @@
 # PJ Digitals E-Store frontend
 
-A JavaScript React + Vite frontend for the supplied Express/MongoDB/Clerk backend.
+React + Vite storefront and admin workspace for the PJ Digitals backend (Express, MongoDB, Clerk, Razorpay).
 
-## Included
+## What's in it
 
-### Customer storefront
-- Home and product catalogue
-- Product search, category filtering and sorting
-- Product details and add-to-cart
-- Cart quantity changes and removal
-- Checkout form (cash on delivery or Stripe option)
-- Order history
-- Account details and address form
+**Customer storefront** - home with live shop ads, catalogue (search, category, sort, shop/location filters), product details with reviews and wishlist, cart, checkout (saved or new address, UPI/Card via Razorpay or cash on delivery), order history with delivery tracking, cancel and "pay now" for unpaid orders, saved addresses, shop directory, wishlist, notification bell.
 
-### Admin workspace
-- Admin-only workspace selected by calling `GET /api/admin/stats`
-- Dashboard totals and recent orders
-- Product create, edit, delete, image upload
-- Order list and order-status updates
-- Admin sign-out
+**Admin workspace** (shown when `GET /api/admin/stats` succeeds) - dashboard, products (including inactive ones), orders with status updates, payments, shop and delivery-partner approvals, delivery assignment, ad moderation.
 
-The backend's admin API is the authority for role selection. The UI does not rely only on Clerk metadata because the supplied `authorize()` middleware checks the MongoDB user's `role`.
+Shop owners and delivery partners use their own mobile apps; this project doesn't include those screens.
 
 ## Setup
 
-1. Install Node.js 20+ and pnpm.
-2. Extract this project.
-3. Copy `.env.example` to `.env`.
-4. Set your Clerk publishable key and backend URL:
-
-```env
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key
-VITE_API_URL=https://pj-digitals-estore-server-aedw9rea9-wirebot34.vercel.app
-```
-
-For local backend testing, use `VITE_API_URL=http://localhost:3000`.
-
-5. Install and run:
-
 ```bash
+cp .env.example .env     # set VITE_CLERK_PUBLISHABLE_KEY and VITE_API_URL
 pnpm install
-pnpm dev
+pnpm dev                 # http://localhost:5173
+pnpm build               # production build
 ```
 
-Open the Vite URL shown in the terminal (usually http://localhost:5173).
+`VITE_API_URL` is the backend address (`http://localhost:3000` locally). Only the Clerk **publishable** key belongs in this project.
 
-Build check:
+## How it talks to the backend
 
-```bash
-pnpm build
-```
+- `src/api.js` - fetch wrapper, `qs()` query builder, formatting helpers. Pages receive `token` as a **function** (Clerk tokens are short-lived) and call `await token()` per request.
+- `src/meta.jsx` - loads `GET /api/meta` once (categories, locations, status labels such as `shipping` -> "Dispatched", and whether cash on delivery / online payments are enabled). Defaults are used if the call fails.
+- `src/razorpay.js` - opens Razorpay checkout from the `payment` object returned by `POST /api/orders`, then calls `POST /api/payments/verify`. Abandoned payments are resumed from My orders via `POST /api/payments/create`.
+- `src/pages/Customer.jsx`, `src/pages/Admin.jsx` - the screens; `src/App.jsx` - auth, role detection and routing.
 
-## Clerk / backend configuration
+Full endpoint list: `API.md` in the backend project.
 
-- The Clerk publishable key must belong to the same Clerk application as the backend's Clerk secret key.
-- Add your frontend origin (for example `http://localhost:5173`) to Clerk's allowed origins as required by your Clerk configuration.
-- The backend currently uses `app.use(cors())`; if you later restrict CORS, allow the frontend origin and the `Authorization` header.
-- The admin user must exist in MongoDB with `role: "admin"`. The supplied `makeAdmin()` script uses `ADMIN_EMAIL` and updates Clerk public metadata, but backend authorization checks the MongoDB role. Sign out and sign in again after promoting a user if Clerk metadata appears stale.
-- Do not put Clerk secret keys, MongoDB URIs, or Cloudinary API secrets in this frontend `.env`. Only the publishable key belongs here.
+## Backend configuration to check
 
-## Important backend issues found in the supplied archive
-
-These are backend issues, not frontend styling or routing issues. Fix them before treating the relevant workflow as production-ready.
-
-1. **Admin all-orders route ordering:** in `routes/ordersRoute.ts`, `GET /:id` is declared before `GET /admin/all`. Move `/admin/all` above `/:id`, otherwise `/admin/all` can be handled as an order ID.
-2. **Single order response status:** in `controllers/ordersController.ts`, `getOrder` currently returns `res.status(403).json({ success: true, data: order })`. It should return HTTP 200, e.g. `return res.status(200).json({ success: true, data: order });`.
-3. **Order item mapping:** in `createOrder`, the current `orderItems.push` sets `quantity: item.price` and omits `price`. It should use:
-   ```ts
-   orderItems.push({
-     product: item.product._id,
-     name: (item.product as any).name,
-     quantity: item.quantity,
-     price: item.price,
-     size: item.size,
-   });
-   ```
-4. **Address model uniqueness:** `AddressSchema.user` has `unique: true`, which allows only one address per user. Remove `unique: true` if multiple saved addresses are intended. Also remove the second `res.json(address)` in `getAddress`; it currently attempts to send a second response.
-5. **Cart remove authentication:** `DELETE /item/:productId` is missing `protect` in `routes/cartRoutes.ts`. Add it before `removeCartItem`.
-6. **Cart clear response:** `clearCart` should send a success response after saving; currently it returns no response body.
-7. **Auth middleware null user:** `protect` should return 401/404 if no MongoDB user exists for the Clerk user, before calling `next()`. `authorize()` should guard `req.user` before reading `.role`.
-8. **Product listing:** `GET /api/products` returns active products only. The admin product table therefore also sees only active products; inactive products cannot be managed from this API until an admin-specific list route is added.
-
-## Scope notes
-
-- The supplied backend has no user-management, coupon, inventory history, analytics export, payment-intent, or saved-wishlist endpoints. This frontend does not invent them.
-- Stripe is only shown as a backend-supported enum choice; the supplied backend does not include a Stripe payment integration. Cash on delivery is the safe test option.
-- The backend checkout currently has the order item mapping bug above. Fix it before testing real orders.
-- Address UI supports the one-address-per-user behavior currently enforced by the schema.
-- The backend's admin statistics endpoint returns total users, products, orders, revenue, and recent orders. No separate analytics API exists.
-
-## Security
-
-Never expose `.env` from your backend in a frontend project. Never share Cloudinary API secrets, Clerk secret keys, or MongoDB connection strings. Use only a Clerk publishable key in this frontend.
+- If the backend sets `CLIENT_URL`, include this app's origin (e.g. `http://localhost:5173`) and your deployed domain.
+- The Clerk publishable key must belong to the same Clerk application as the backend's secret key.
+- Razorpay: the backend needs `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`; otherwise `/api/meta` reports online payments as off and checkout only offers cash on delivery (if `ALLOW_COD` isn't `false`).
