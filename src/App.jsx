@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Routes, Route, Navigate, Link } from "react-router-dom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useClerk, useUser, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
 import { ShoppingCart } from "lucide-react";
 import { api } from "./api";
@@ -10,6 +10,8 @@ import {
 } from "./pages/Customer";
 import { AdminShell } from "./pages/Admin";
 import { Partner, PartnerBanner } from "./pages/Partner";
+import { ShopOwnerWorkspace } from "./pages/ShopOwner";
+import { DeliveryWorkspace } from "./pages/Delivery";
 
 export default function App() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -79,6 +81,21 @@ export default function App() {
 
   useEffect(() => { refreshCartCount(); }, [refreshCartCount]);
 
+  // keep the role current when /api/me is reloaded (e.g. right after an admin approves an application)
+  useEffect(() => { if (me?.user?.role) setRole(me.user.role); }, [me]);
+
+  // Shop owners and delivery partners land in their workspace right after login
+  // (once per visit) and can switch to the store with "Open store".
+  const location = useLocation();
+  const navigate = useNavigate();
+  const landed = useRef(false);
+  const workspaceKind = role === "shop_owner" ? "shop" : role === "delivery_partner" ? "delivery" : null;
+  useEffect(() => {
+    if (landed.current || roleLoading || !workspaceKind) return;
+    landed.current = true;
+    if (location.pathname === "/") navigate("/workspace", { replace: true });
+  }, [roleLoading, workspaceKind, location.pathname, navigate]);
+
   if (!isLoaded || (isSignedIn && roleLoading)) return <Loading/>;
 
   const admin = role === "admin";
@@ -86,6 +103,10 @@ export default function App() {
     <Notice notice={notice} clear={() => setNotice(null)}/>
     {admin ? (
       <AdminShell token={token} user={user} signOut={signOut} tell={tell}/>
+    ) : workspaceKind && location.pathname.startsWith("/workspace") ? (
+      workspaceKind === "shop"
+        ? <ShopOwnerWorkspace token={token} me={me} refreshMe={loadMe} tell={tell}/>
+        : <DeliveryWorkspace token={token} me={me} refreshMe={loadMe} tell={tell}/>
     ) : (
       <StoreShell user={user} signedIn={isSignedIn} role={role} me={me} refreshMe={loadMe} token={token} cartCount={cartCount}
         refreshCartCount={refreshCartCount} tell={tell} signOut={signOut}/>
@@ -93,12 +114,14 @@ export default function App() {
   </>;
 }
 
+const hasWorkspace = (role) => role === "shop_owner" || role === "delivery_partner";
+
 function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, refreshCartCount, tell, signOut }) {
   return <div className="min-h-screen bg-[#f7f8fc]">
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
         <Link to="/" className="font-display text-xl font-extrabold tracking-tight text-slate-950">PJ<span className="text-indigo-600">.</span>DIGITALS</Link>
-        <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex"><Link to="/" className="hover:text-indigo-600">Home</Link><Link to="/shop" className="hover:text-indigo-600">Shop</Link><Link to="/shops" className="hover:text-indigo-600">Shops</Link>{signedIn && <Link to="/wishlist" className="hover:text-indigo-600">Wishlist</Link>}{signedIn && <Link to="/orders" className="hover:text-indigo-600">My orders</Link>}{signedIn && <Link to="/partner" className="hover:text-indigo-600">Sell / Deliver</Link>}</nav>
+        <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex"><Link to="/" className="hover:text-indigo-600">Home</Link><Link to="/shop" className="hover:text-indigo-600">Shop</Link><Link to="/shops" className="hover:text-indigo-600">Shops</Link>{signedIn && <Link to="/wishlist" className="hover:text-indigo-600">Wishlist</Link>}{signedIn && <Link to="/orders" className="hover:text-indigo-600">My orders</Link>}{signedIn && hasWorkspace(role) ? <Link to="/workspace" className="font-bold text-indigo-600">{role === "shop_owner" ? "My shop" : "My deliveries"}</Link> : signedIn && <Link to="/partner" className="hover:text-indigo-600">Sell / Deliver</Link>}</nav>
         <div className="flex items-center gap-3">
           {signedIn && <NotificationBell token={token}/>}
           <Link to="/cart" className="relative rounded-full p-2 hover:bg-slate-100"><ShoppingCart size={20}/>{cartCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">{cartCount}</span>}</Link>

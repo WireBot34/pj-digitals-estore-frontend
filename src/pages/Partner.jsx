@@ -11,13 +11,13 @@ const TONE = { approved: "green", pending: "amber", rejected: "red", suspended: 
 const MESSAGES = {
   shop: {
     pending: "Your shop application is being reviewed. We'll notify you once it's decided.",
-    approved: "Your shop is approved. Manage products, stock and orders in the shop-owner app.",
+    approved: "Your shop is approved. Add products and manage orders from your workspace.",
     rejected: "Your shop application was not approved.",
     suspended: "Your shop has been suspended.",
   },
   delivery: {
     pending: "Your delivery-partner application is being reviewed. We'll notify you once it's decided.",
-    approved: "You're approved as a delivery partner. Accept jobs in the delivery app.",
+    approved: "You're approved as a delivery partner. Accept and complete jobs from your workspace.",
     rejected: "Your delivery-partner application was not approved.",
     suspended: "Your delivery-partner account has been suspended.",
   },
@@ -28,6 +28,11 @@ const entries = (me) => [
   me?.deliveryPartner && { kind: "delivery", label: me.deliveryPartner.fullName, status: me.deliveryPartner.status, reason: me.deliveryPartner.statusReason },
 ].filter(Boolean);
 
+// the workspace is available once approved AND the role has been granted
+const canOpen = (me, e) =>
+  e.status === "approved" &&
+  ((e.kind === "shop" && me?.user?.role === "shop_owner") || (e.kind === "delivery" && me?.user?.role === "delivery_partner"));
+
 /** Slim strip under the header showing the state of any application. */
 export function PartnerBanner({ me }) {
   const list = entries(me);
@@ -36,16 +41,17 @@ export function PartnerBanner({ me }) {
     {list.map((e) => <p key={e.kind} className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
       <Pill tone={TONE[e.status]}>{e.status}</Pill>
       <span>{MESSAGES[e.kind][e.status]}{e.reason && ["rejected", "suspended"].includes(e.status) ? ` Reason: ${e.reason}` : ""}</span>
-      <Link to="/partner" className="font-bold text-indigo-600 hover:underline">Details</Link>
+      {canOpen(me, e) ? <Link to="/workspace" className="font-bold text-indigo-600 hover:underline">Open workspace</Link> : <Link to="/partner" className="font-bold text-indigo-600 hover:underline">Details</Link>}
     </p>)}
   </div></div>;
 }
 
-function StatusCard({ icon: Icon, title, entry }) {
+function StatusCard({ icon: Icon, title, entry, me }) {
   return <section className="rounded-2xl border border-slate-200 bg-white p-6">
     <div className="flex items-center gap-3"><Icon className="text-indigo-600" size={22}/><h2 className="text-lg font-extrabold">{title}</h2><Pill tone={TONE[entry.status]}>{entry.status}</Pill></div>
     <p className="mt-3 text-sm font-semibold text-slate-800">{entry.label}</p>
     <p className="mt-1 text-sm text-slate-600">{MESSAGES[entry.kind][entry.status]}</p>
+    {canOpen(me, entry) && <Link to="/workspace" className="btn-primary mt-4">Open workspace</Link>}
     {entry.reason && ["rejected", "suspended"].includes(entry.status) && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"><b>Reason:</b> {entry.reason}</p>}
     {["rejected", "suspended"].includes(entry.status) && <p className="mt-3 text-xs text-slate-500">To appeal or fix the issue, raise a support request or contact the store team.</p>}
   </section>;
@@ -147,7 +153,7 @@ export function Partner({ token, signedIn, me, refreshMe, tell }) {
   const driver = entries(me).find((e) => e.kind === "delivery");
   return <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
     <div><h1 className="font-display text-4xl font-extrabold">Work with us</h1><p className="mt-2 text-slate-500">Sell your products or deliver orders in Thodupuzha and Muttom.</p></div>
-    {shop ? <StatusCard icon={Store} title="Your shop" entry={shop}/> : <ShopForm token={token} tell={tell} onDone={refreshMe}/>}
-    {driver ? <StatusCard icon={Truck} title="Your delivery profile" entry={driver}/> : <DriverForm token={token} tell={tell} onDone={refreshMe}/>}
+    {shop ? <StatusCard icon={Store} title="Your shop" entry={shop} me={me}/> : <ShopForm token={token} tell={tell} onDone={refreshMe}/>}
+    {driver ? <StatusCard icon={Truck} title="Your delivery profile" entry={driver} me={me}/> : <DriverForm token={token} tell={tell} onDone={refreshMe}/>}
   </main>;
 }

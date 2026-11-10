@@ -1,27 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { UserButton } from "@clerk/clerk-react";
 import { ArrowRight, ClipboardList, CreditCard, Edit3, ImagePlus, LayoutDashboard, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Store, Trash2, Truck, Users, X } from "lucide-react";
 import { api, imageOf, money, qs } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
-
-/** Loads a paginated admin list and exposes reload(). */
-function useList(path, params, token, tell) {
-  const [state, setState] = useState({ data: [], pagination: null, loading: true });
-  const key = JSON.stringify(params);
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true }));
-    try {
-      const r = await api(path + qs(params), { token: await token() });
-      setState({ data: r.data || [], pagination: r.pagination, loading: false });
-    } catch (e) {
-      tell(e.message, "error");
-      setState((s) => ({ ...s, loading: false }));
-    }
-  }, [path, key, token, tell]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [load]);
-  return { ...state, reload: load };
-}
+import { useList } from "../useList";
 
 const statusTone = (s) => ({ approved: "green", pending: "amber", rejected: "red", suspended: "red" })[s] || "gray";
 
@@ -104,7 +87,7 @@ function ProductTable({ products, onEdit, onDelete }) {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-function ProductModal({ product, token, close, save, tell }) {
+export function ProductModal({ product, token, close, save, tell, owner = false }) {
   const meta = useMeta();
   const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isActive: product?.isActive !== false, shop: "" });
   const [existing, setExisting] = useState(product?.images || []);
@@ -114,7 +97,7 @@ function ProductModal({ product, token, close, save, tell }) {
   const change = (e) => setForm({ ...form, [e.target.name]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
   useEffect(() => { // admins may assign a new product to a shop
-    if (product) return;
+    if (product || owner) return;
     (async () => { try { const r = await api("/api/admin/shops" + qs({ status: "approved", limit: 100 }), { token: await token() }); setShops(r.data || []); } catch { /* optional */ } })();
   }, [product, token]);
 
@@ -130,10 +113,10 @@ function ProductModal({ product, token, close, save, tell }) {
     if (!existing.length && !files.length) { tell("Add at least one product image.", "error"); return; }
     setSaving(true);
     const fd = new FormData();
-    ["name", "description", "price", "stock", "category", "isFeatured", "isActive"].forEach((k) => fd.append(k, String(form[k])));
+    ["name", "description", "price", "stock", "category", ...(owner ? [] : ["isFeatured"]), "isActive"].forEach((k) => fd.append(k, String(form[k])));
     if (form.comparePrice !== "") fd.append("comparePrice", String(form.comparePrice));
     fd.append("sizes", JSON.stringify(form.sizes.split(",").map((s) => s.trim()).filter(Boolean)));
-    if (!product && form.shop) fd.append("shop", form.shop);
+    if (!product && !owner && form.shop) fd.append("shop", form.shop);
     // always send the kept images (even an empty list) so removals take effect
     if (product) fd.append("existingImages", JSON.stringify(existing));
     files.forEach((f) => fd.append("images", f));
@@ -150,11 +133,11 @@ function ProductModal({ product, token, close, save, tell }) {
       <div><label className="label">Stock</label><input className="input w-full" type="number" min="0" name="stock" required value={form.stock} onChange={change}/></div>
       <div><label className="label">Category</label><select className="input w-full" name="category" value={form.category} onChange={change}>{meta.categories.map((c) => <option key={c}>{c}</option>)}</select></div>
       <div><label className="label">Sizes (comma separated)</label><input className="input w-full" name="sizes" value={form.sizes} onChange={change} placeholder="S, M, L"/></div>
-      {!product && <div><label className="label">Shop</label><select className="input w-full" name="shop" value={form.shop} onChange={change}><option value="">Platform (no shop)</option>{shops.map((s) => <option key={s._id} value={s._id}>{s.name} · {s.location}</option>)}</select></div>}
+      {!product && !owner && <div><label className="label">Shop</label><select className="input w-full" name="shop" value={form.shop} onChange={change}><option value="">Platform (no shop)</option>{shops.map((s) => <option key={s._id} value={s._id}>{s.name} · {s.location}</option>)}</select></div>}
       <div className="sm:col-span-2"><label className="label">Product images (up to 5)</label>
         {existing.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{existing.map((img) => <div key={img} className="relative h-16 w-16 overflow-hidden rounded-lg bg-slate-100"><img src={img} className="h-full w-full object-cover" alt=""/><button type="button" title="Remove" onClick={() => setExisting(existing.filter((x) => x !== img))} className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"><X size={12}/></button></div>)}</div>}
         <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{files.length ? `${files.length} new file(s) selected` : "Choose images (JPG, PNG, WEBP, AVIF · max 5 MB each)"}<input className="hidden" type="file" accept={IMAGE_TYPES.join(",")} multiple onChange={pickFiles}/></label></div>
-      <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={change}/> Featured product</label>
+      {!owner && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={change}/> Featured product</label>}
       <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isActive" checked={form.isActive} onChange={change}/> Active</label>
     </div>
     <div className="mt-7 flex justify-end gap-3"><button type="button" onClick={close} className="btn-secondary">Cancel</button><button disabled={saving} className="btn-primary">{saving ? "Saving..." : product ? "Save changes" : "Create product"}</button></div></form></div>;
