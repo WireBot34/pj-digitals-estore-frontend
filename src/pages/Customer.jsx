@@ -4,16 +4,15 @@ import { ArrowRight, Bell, Edit3, Heart, MapPin, Package, Search, ShoppingBag, S
 import { api, imageOf, money, qs } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
+import { AdHero, AdStrip } from "../ads";
 import { AuthPrompt, Empty, Loading, Pager, Pill, Stars, cx, orderTone, payTone, prettify } from "../ui";
 
 /* ------------------------------------------------------------------ Home */
 export function Home() {
   const meta = useMeta();
   const [featured, setFeatured] = useState([]);
-  const [ads, setAds] = useState([]);
   useEffect(() => {
     api("/api/products" + qs({ featured: "true", limit: 4 })).then((r) => setFeatured(r.data || [])).catch(() => {});
-    api("/api/ads").then((r) => setAds(r.data || [])).catch(() => {});
   }, []);
   return <main>
     <section className="bg-[#101828] text-white"><div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-20 md:grid-cols-2 md:py-28">
@@ -21,7 +20,7 @@ export function Home() {
       <div className="relative"><div className="absolute inset-8 rounded-full bg-indigo-500/20 blur-3xl"/><div className="relative grid grid-cols-2 gap-4"><div className="rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-700 p-8 pt-12"><ShoppingBag size={38}/><p className="mt-12 text-2xl font-extrabold">Shop smart.</p><p className="mt-2 text-sm text-indigo-100">Everyday essentials</p></div><div className="mt-10 rounded-3xl bg-gradient-to-br from-slate-600 to-slate-800 p-8 pt-12"><Package size={38}/><p className="mt-12 text-2xl font-extrabold">Stay connected.</p><p className="mt-2 text-sm text-slate-300">Tech that works</p></div></div></div>
     </div></section>
 
-    {ads.length > 0 && <section className="mx-auto max-w-7xl px-5 pt-12"><p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">Offers from local shops</p><div className="mt-4 flex gap-4 overflow-x-auto pb-2">{ads.map((ad) => <Link key={ad._id} to={ad.product ? `/product/${ad.product}` : `/shop?shop=${ad.shop?._id || ""}`} className="min-w-[280px] max-w-[320px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:shadow-lg">{ad.image && <img src={ad.image} alt={ad.title} className="h-40 w-full object-cover"/>}<div className="p-4"><h3 className="font-bold">{ad.title}</h3>{ad.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{ad.description}</p>}{ad.shop && <p className="mt-2 text-xs font-semibold text-indigo-600">{ad.shop.name}{ad.shop.location ? ` · ${ad.shop.location}` : ""}</p>}</div></Link>)}</div></section>}
+    <AdHero placement="home"/>
 
     <section className="mx-auto max-w-7xl px-5 py-16"><div className="flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">Browse by category</p><h2 className="mt-2 font-display text-3xl font-extrabold">Find what you need</h2></div><Link to="/shop" className="hidden text-sm font-bold text-indigo-600 sm:block">View all <ArrowRight className="inline" size={16}/></Link></div><div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">{meta.categories.map((c, i) => <Link to={`/shop?category=${encodeURIComponent(c)}`} key={c} className="rounded-2xl border border-slate-200 bg-white p-6 transition hover:-translate-y-1 hover:shadow-lg"><span className="text-xs font-bold text-indigo-500">{String(i + 1).padStart(2, "0")}</span><h3 className="mt-5 font-display text-lg font-extrabold">{c}</h3><span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-slate-500">Explore <ArrowRight size={13}/></span></Link>)}</div></section>
 
@@ -83,6 +82,7 @@ export function Shop({ tell }) {
   }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <main className="mx-auto max-w-7xl px-5 py-12">
+    <AdStrip placement="catalogue" shop={shop}/>
     <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">The catalogue</p><h1 className="mt-2 font-display text-4xl font-extrabold">{shopInfo ? shopInfo.name : "Shop all products"}</h1><p className="mt-2 text-slate-500">{shopInfo ? `${shopInfo.location || ""}${shopInfo.addressLine ? " · " + shopInfo.addressLine : ""}` : "Browse products from local shops."}</p></div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products..." className="input pl-10"/></div>
         <select value={category} onChange={(e) => setParam("category", e.target.value)} className="input"><option value="">All categories</option>{meta.categories.map((c) => <option key={c}>{c}</option>)}</select>
@@ -141,7 +141,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
     if (!signedIn) { tell("Sign in to save items to your wishlist.", "error"); return; }
     try { await api(`/api/wishlist/${p._id}`, { token: await token(), method: wished ? "DELETE" : "POST" }); setWished(!wished); tell(wished ? "Removed from wishlist." : "Saved to wishlist."); } catch (e) { tell(e.message, "error"); }
   };
-  return <main className="mx-auto max-w-6xl px-5 py-12"><div className="grid gap-10 md:grid-cols-2">
+  return <main className="mx-auto max-w-6xl px-5 py-12"><AdStrip placement="product" title="Sponsored" className="mb-6"/><div className="grid gap-10 md:grid-cols-2">
     <div className="overflow-hidden rounded-3xl bg-white">{imageOf(p.images) ? <img src={imageOf(p.images)} className="aspect-square w-full object-cover" alt={p.name}/> : <div className="grid aspect-square place-items-center text-slate-300"><Package size={60}/></div>}</div>
     <div className="py-4"><p className="text-xs font-bold uppercase tracking-widest text-indigo-600">{p.category}</p><h1 className="mt-3 font-display text-4xl font-extrabold">{p.name}</h1>
       {p.ratings?.count > 0 && <div className="mt-2 flex items-center gap-2 text-sm text-slate-500"><Stars value={p.ratings.average} size={16}/>{p.ratings.average} ({p.ratings.count} review{p.ratings.count > 1 ? "s" : ""})</div>}
@@ -408,6 +408,7 @@ export function Shops({ tell }) {
     return () => { live = false; clearTimeout(t); };
   }, [location, search, tell]);
   return <main className="mx-auto max-w-7xl px-5 py-12">
+    <AdStrip placement="shops" className="mb-10"/>
     <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">Local shops</p><h1 className="mt-2 font-display text-4xl font-extrabold">Shop by store</h1></div><div className="flex flex-col gap-2 sm:flex-row"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={18}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search shops..." className="input pl-10"/></div><select value={location} onChange={(e) => setSp(e.target.value ? { location: e.target.value } : {}, { replace: true })} className="input"><option value="">All locations</option>{meta.locations.map((l) => <option key={l}>{l}</option>)}</select></div></div>
     {loading ? <Loading/> : shops.length ? <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{shops.map((s) => <Link key={s._id} to={`/shop?shop=${s._id}`} className="flex gap-4 rounded-2xl border border-slate-200 bg-white p-5 transition hover:-translate-y-1 hover:shadow-lg"><div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">{s.logo ? <img src={s.logo} alt="" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-300"><Store size={26}/></div>}</div><div className="min-w-0"><h3 className="truncate font-extrabold">{s.name}</h3><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin size={12}/>{s.location}{s.addressLine ? ` · ${s.addressLine}` : ""}</p>{s.description && <p className="mt-2 line-clamp-2 text-sm text-slate-500">{s.description}</p>}{s.isOpen === false && <p className="mt-2 text-xs font-bold text-red-500">Currently closed</p>}</div></Link>)}</div> : <div className="mt-8"><Empty title="No shops found" detail="Try another location or search."/></div>}
   </main>;

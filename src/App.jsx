@@ -3,7 +3,8 @@ import { Routes, Route, Navigate, Link, useLocation, useNavigate } from "react-r
 import { useAuth, useClerk, useUser, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
 import { ShoppingCart } from "lucide-react";
 import { api } from "./api";
-import { Loading, Notice } from "./ui";
+import { useMeta } from "./meta";
+import { AuthPrompt, Loading, Notice } from "./ui";
 import {
   Account, Cart, Checkout, Home, NotificationBell, Orders, ProductDetail,
   Shop, Shops, Wishlist,
@@ -12,6 +13,7 @@ import { AdminShell } from "./pages/Admin";
 import { Partner, PartnerBanner } from "./pages/Partner";
 import { ShopOwnerWorkspace } from "./pages/ShopOwner";
 import { DeliveryWorkspace } from "./pages/Delivery";
+import { SupportPanel } from "./pages/SupportPanel";
 
 export default function App() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -117,11 +119,13 @@ export default function App() {
 const hasWorkspace = (role) => role === "shop_owner" || role === "delivery_partner";
 
 function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, refreshCartCount, tell, signOut }) {
+  const meta = useMeta();
   return <div className="min-h-screen bg-[#f7f8fc]">
+    {meta.announcement && <div className="bg-indigo-600 px-5 py-2 text-center text-sm font-semibold text-white">{meta.announcement}</div>}
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
         <Link to="/" className="font-display text-xl font-extrabold tracking-tight text-slate-950">PJ<span className="text-indigo-600">.</span>DIGITALS</Link>
-        <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex"><Link to="/" className="hover:text-indigo-600">Home</Link><Link to="/shop" className="hover:text-indigo-600">Shop</Link><Link to="/shops" className="hover:text-indigo-600">Shops</Link>{signedIn && <Link to="/wishlist" className="hover:text-indigo-600">Wishlist</Link>}{signedIn && <Link to="/orders" className="hover:text-indigo-600">My orders</Link>}{signedIn && hasWorkspace(role) ? <Link to="/workspace" className="font-bold text-indigo-600">{role === "shop_owner" ? "My shop" : "My deliveries"}</Link> : signedIn && <Link to="/partner" className="hover:text-indigo-600">Sell / Deliver</Link>}</nav>
+        <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-600 md:flex"><Link to="/" className="hover:text-indigo-600">Home</Link><Link to="/shop" className="hover:text-indigo-600">Shop</Link><Link to="/shops" className="hover:text-indigo-600">Shops</Link>{signedIn && <Link to="/wishlist" className="hover:text-indigo-600">Wishlist</Link>}{signedIn && <Link to="/orders" className="hover:text-indigo-600">My orders</Link>}{signedIn && <Link to="/support" className="hover:text-indigo-600">Help</Link>}{signedIn && hasWorkspace(role) ? <Link to="/workspace" className="font-bold text-indigo-600">{role === "shop_owner" ? "My shop" : "My deliveries"}</Link> : signedIn && <Link to="/partner" className="hover:text-indigo-600">Sell / Deliver</Link>}</nav>
         <div className="flex items-center gap-3">
           {signedIn && <NotificationBell token={token}/>}
           <Link to="/cart" className="relative rounded-full p-2 hover:bg-slate-100"><ShoppingCart size={20}/>{cartCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">{cartCount}</span>}</Link>
@@ -140,6 +144,7 @@ function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, ref
       <Route path="/checkout" element={<Checkout token={token} signedIn={signedIn} refreshCartCount={refreshCartCount} tell={tell}/>}/>
       <Route path="/orders" element={<Orders token={token} signedIn={signedIn} tell={tell}/>}/>
       <Route path="/account" element={<Account token={token} signedIn={signedIn} user={user} tell={tell}/>}/>
+      <Route path="/support" element={<main className="mx-auto max-w-4xl px-5 py-12">{signedIn ? <SupportPanel token={token} tell={tell}/> : <AuthPrompt/>}</main>}/>
       <Route path="/partner" element={<Partner token={token} signedIn={signedIn} me={me} refreshMe={refreshMe} tell={tell}/>}/>
       <Route path="*" element={<Navigate to="/" replace/>}/>
     </Routes>

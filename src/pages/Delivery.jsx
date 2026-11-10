@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { MapPin, Navigation, Phone } from "lucide-react";
 import { api, money } from "../api";
+import { SupportPanel } from "./SupportPanel";
+import { PayoutFields, Stat } from "./admin/common";
 import { useMeta } from "../meta";
 import { useList } from "../useList";
 import { Empty, Loading, Pager, Pill, cx, prettify } from "../ui";
 import { BlockedCard, WorkspaceFrame } from "./WorkspaceFrame";
 
-const TABS = [["active", "Active jobs"], ["history", "History"], ["profile", "My profile"]];
+const TABS = [["active", "Active jobs"], ["history", "History"], ["earnings", "Earnings"], ["profile", "My profile"], ["help", "Help"]];
 const jobTone = (s) => ({ assigned: "amber", accepted: "blue", picked_up: "blue", on_the_way: "blue", delivered: "green" })[s] || "red";
 const when = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "");
 const dropLine = (d = {}) => [d.fullName, d.street, d.landmark, d.location || d.city, d.state, d.zipCode].filter(Boolean).join(", ");
@@ -20,12 +22,12 @@ const ACTIONS = {
   on_the_way: [["delivered", "Mark delivered"], ["failed", "Can't deliver", true]],
 };
 
-export function DeliveryWorkspace({ token, me, refreshMe, tell }) {
+export function DeliveryWorkspace({ token, me, refreshMe, tell, exit }) {
   const partner = me?.deliveryPartner;
   const [tab, setTab] = useState("active");
   const [available, setAvailable] = useState(!!partner?.isAvailable);
   const [share, setShare] = useState(false);
-  const approved = partner?.status === "approved";
+  const approved = partner?.status === "approved" || (!!exit && !!partner);
 
   useEffect(() => setAvailable(!!partner?.isAvailable), [partner?.isAvailable]);
 
@@ -52,13 +54,15 @@ export function DeliveryWorkspace({ token, me, refreshMe, tell }) {
     catch (e) { setAvailable(!next); tell(e.message, "error"); }
   };
 
-  const actions = <><label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)}/> Share location</label>
+  const actions = <>{!exit && <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={share} onChange={(e) => setShare(e.target.checked)}/> Share location</label>}
     <button onClick={toggleAvailability} className={cx("rounded-full px-3 py-2 text-xs font-bold", available ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600")}>{available ? "Online" : "Offline"}</button></>;
 
-  return <WorkspaceFrame title={partner.fullName} subtitle="Delivery partner" tabs={TABS} tab={tab} setTab={setTab} actions={actions} token={token}>
+  return <WorkspaceFrame exit={exit} title={partner.fullName} subtitle={exit ? "Delivery partner · managing as admin" : "Delivery partner"} tabs={TABS} tab={tab} setTab={setTab} actions={actions} token={token}>
     {tab === "active" && <ActiveJobs token={token} tell={tell} refreshMe={refreshMe} available={available}/>}
     {tab === "history" && <History token={token} tell={tell} completed={partner.completedDeliveries}/>}
+    {tab === "earnings" && <Earnings token={token} tell={tell}/>}
     {tab === "profile" && <Profile token={token} tell={tell} partner={partner} refreshMe={refreshMe}/>}
+    {tab === "help" && <SupportPanel token={token} tell={tell}/>}
   </WorkspaceFrame>;
 }
 
@@ -151,4 +155,31 @@ function Profile({ token, tell, partner, refreshMe }) {
     </div>
     <button disabled={saving} className="btn-primary mt-6">{saving ? "Saving..." : "Save profile"}</button>
   </form>;
+}
+
+/* -------------------------------------------------------------- Earnings */
+function Earnings({ token, tell }) {
+  const [d, setD] = useState(null);
+  const [edit, setEdit] = useState(false);
+  const [acct, setAcct] = useState({});
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { try { setD((await api("/api/delivery/earnings", { token: await token() })).data); } catch (e) { tell(e.message, "error"); } }, [token, tell]);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return <Loading/>;
+  const u = d.unsettled;
+  const setA = (k) => (e) => setAcct((a) => ({ ...a, [k]: e.target.value }));
+  const save = async (e) => { e.preventDefault(); setBusy(true); try { await api("/api/delivery/payout-account", { token: await token(), method: "PUT", body: acct }); tell("Payout account saved."); setEdit(false); await load(); } catch (err) { tell(err.message, "error"); } finally { setBusy(false); } };
+  return <>
+    <div className="mb-6"><h2 className="text-2xl font-extrabold">Earnings</h2><p className="mt-1 text-sm text-slate-500">You earn {money(d.feePerDelivery)} for every completed delivery. Cash you collect from customers is settled against your earnings.</p></div>
+    <div className="grid gap-4 sm:grid-cols-3"><Stat label="Today" value={money(d.today.earnings)} hint={`${d.today.deliveries} deliveries`}/><Stat label="Last 7 days" value={money(d.last7Days.earnings)} hint={`${d.last7Days.deliveries} deliveries`}/><Stat label="All time" value={money(d.total.earnings)} hint={`${d.total.deliveries} deliveries`}/></div>
+    <div className={cx("mt-6 rounded-2xl p-6", u.net >= 0 ? "bg-emerald-50" : "bg-red-50")}>
+      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Next settlement</p>
+      <p className={cx("mt-1 font-display text-3xl font-extrabold", u.net >= 0 ? "text-emerald-700" : "text-red-700")}>{u.net >= 0 ? `We pay you ${money(u.net)}` : `You hand over ${money(-u.net)}`}</p>
+      <p className="mt-2 text-sm text-slate-600">{u.deliveries} unsettled deliveries · earnings {money(u.earnings)} − cash you collected {money(u.codCollected)}</p></div>
+    <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6"><div className="flex items-center justify-between"><h3 className="font-extrabold">Where we pay you</h3>{!edit && <button onClick={() => { setAcct({}); setEdit(true); }} className="btn-secondary px-3 py-2 text-xs">{d.payoutAccount ? "Change" : "Add account"}</button>}</div>
+      {!edit ? (d.payoutAccount ? <p className="mt-3 text-sm text-slate-600">{d.payoutAccount.method === "upi" ? `UPI: ${d.payoutAccount.upiId}` : `${d.payoutAccount.accountHolder} · ${d.payoutAccount.accountNumber} · ${d.payoutAccount.ifsc}`}</p> : <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Add a UPI id or bank account so we can pay you.</p>)
+        : <form onSubmit={save} className="mt-4 space-y-4"><PayoutFields f={acct} set={setA}/><div className="flex gap-2"><button disabled={busy || !acct.method} className="btn-primary px-4 py-2">Save</button><button type="button" onClick={() => setEdit(false)} className="btn-secondary px-4 py-2">Cancel</button></div></form>}</div>
+    <h3 className="mb-3 mt-8 font-extrabold">Past settlements</h3>
+    {!d.settlements.length ? <Empty title="No settlements yet" detail="The store team settles your earnings and cash periodically."/> : <div className="space-y-2">{d.settlements.map((s) => <div key={s._id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-4 text-sm"><span>{when(s.createdAt)} · {s.deliveriesCount} deliveries{s.reference ? ` · ref ${s.reference}` : ""}</span><b className={s.net >= 0 ? "text-emerald-700" : "text-red-700"}>{s.net >= 0 ? `Paid ${money(s.net)}` : `Handed over ${money(-s.net)}`}</b></div>)}</div>}
+  </>;
 }

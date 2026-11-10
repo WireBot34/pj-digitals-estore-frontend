@@ -1,23 +1,27 @@
-import React, { useEffect, useState } from "react";
-import { Edit3, ImagePlus, Plus, Search, Trash2 } from "lucide-react";
-import { api, imageOf, money } from "../api";
+import React, { useCallback, useEffect, useState } from "react";
+import { Download, Edit3, ImagePlus, Plus, Search, Trash2 } from "lucide-react";
+import { api, download, imageOf, money } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { useList } from "../useList";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
 import { ProductModal } from "./Admin";
 import { BlockedCard, WorkspaceFrame } from "./WorkspaceFrame";
+import { SupportPanel } from "./SupportPanel";
+import { PayoutFields, Stat } from "./admin/common";
+import { PlacementPicker } from "./admin/ops";
+import { AD_PLACEMENT_LABELS } from "../ads";
 
 const adTone = (s) => ({ approved: "green", pending: "amber", rejected: "red", draft: "gray" })[s] || "gray";
 const day = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const addressLine = (a = {}) => [a.fullName, a.street, a.landmark, a.location || a.city, a.state, a.zipCode].filter(Boolean).join(", ");
 
-const TABS = [["overview", "Overview"], ["products", "Products"], ["orders", "Orders"], ["ads", "Advertisements"], ["settlements", "Payouts"], ["profile", "Shop profile"]];
+const TABS = [["overview", "Overview"], ["products", "Products"], ["orders", "Orders"], ["ads", "Advertisements"], ["settlements", "Payouts"], ["profile", "Shop profile"], ["help", "Help"]];
 
-export function ShopOwnerWorkspace({ token, me, refreshMe, tell }) {
+export function ShopOwnerWorkspace({ token, me, refreshMe, tell, exit }) {
   const shop = me?.shop;
   const [tab, setTab] = useState("overview");
   const [busy, setBusy] = useState(false);
-  if (!shop || shop.status !== "approved") return <BlockedCard noun="Shop" entry={shop}/>;
+  if (!shop || (!exit && shop.status !== "approved")) return <BlockedCard noun="Shop" entry={shop}/>;
 
   const toggleOpen = async () => {
     setBusy(true);
@@ -27,13 +31,14 @@ export function ShopOwnerWorkspace({ token, me, refreshMe, tell }) {
   const open = shop.isOpen !== false;
   const actions = <button disabled={busy} onClick={toggleOpen} className={cx("rounded-full px-3 py-2 text-xs font-bold", open ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600")}>{open ? "Shop is open" : "Shop is closed"}</button>;
 
-  return <WorkspaceFrame title={shop.name} subtitle={shop.location} tabs={TABS} tab={tab} setTab={setTab} actions={actions} token={token}>
+  return <WorkspaceFrame exit={exit} title={shop.name} subtitle={exit ? `${shop.location} · managing as admin` : shop.location} tabs={TABS} tab={tab} setTab={setTab} actions={actions} token={token}>
     {tab === "overview" && <Overview token={token} tell={tell} setTab={setTab}/>}
     {tab === "products" && <Products token={token} tell={tell}/>}
     {tab === "orders" && <ShopOrders token={token} tell={tell}/>}
     {tab === "ads" && <Ads token={token} tell={tell}/>}
-    {tab === "settlements" && <Settlements token={token} tell={tell}/>}
+    {tab === "settlements" && <Payouts token={token} tell={tell}/>}
     {tab === "profile" && <Profile token={token} tell={tell} shop={shop} refreshMe={refreshMe}/>}
+    {tab === "help" && <SupportPanel token={token} tell={tell}/>}
   </WorkspaceFrame>;
 }
 
@@ -168,6 +173,8 @@ function Ads({ token, tell }) {
         {ad.image && <img src={ad.image} className="h-40 w-full object-cover" alt=""/>}
         <div className="p-5"><div className="flex items-start justify-between gap-3"><h3 className="font-extrabold">{ad.title}</h3><Pill tone={adTone(ad.status)}>{ad.status}</Pill></div>
           {ad.description && <p className="mt-2 line-clamp-2 text-sm text-slate-600">{ad.description}</p>}
+          <div className="mt-2 flex flex-wrap gap-1.5">{(ad.placements?.length ? ad.placements : ["home"]).map((p) => <span key={p} className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">{AD_PLACEMENT_LABELS[p] || p}</span>)}</div>
+          {ad.status === "approved" && <p className="mt-2 text-xs text-slate-500">👁 {ad.impressions || 0} views · 👆 {ad.clicks || 0} clicks{ad.impressions ? ` · CTR ${((ad.clicks / ad.impressions) * 100).toFixed(1)}%` : ""}</p>}
           <p className="mt-2 text-xs text-slate-500">{day(ad.startsAt)} – {ad.endsAt ? day(ad.endsAt) : "no end date"}{ad.targetLocations?.length ? ` · ${ad.targetLocations.join(", ")}` : " · all locations"}</p>
           {ad.status === "rejected" && ad.rejectionReason && <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-700"><b>Rejected:</b> {ad.rejectionReason}</p>}
           <div className="mt-4 flex gap-2"><button onClick={() => { setEditing(ad); setModal(true); }} className="btn-secondary px-3 py-2 text-xs">{ad.status === "draft" ? "Edit / submit" : "Edit"}</button><button onClick={() => remove(ad)} className="btn-secondary px-3 py-2 text-xs text-red-600">Delete</button></div></div></article>)}</div>}
@@ -179,6 +186,10 @@ function AdModal({ ad, token, tell, close, done }) {
   const meta = useMeta();
   const [f, setF] = useState({ title: ad?.title || "", description: ad?.description || "", startsAt: ad?.startsAt?.slice(0, 10) || "", endsAt: ad?.endsAt?.slice(0, 10) || "" });
   const [locs, setLocs] = useState(ad?.targetLocations || []);
+  const [placements, setPlacements] = useState(ad?.placements?.length ? ad.placements : ["home"]);
+  const [product, setProduct] = useState(ad?.product || "");
+  const [myProducts, setMyProducts] = useState([]);
+  useEffect(() => { (async () => { try { setMyProducts((await api("/api/shop/products?limit=100", { token: await token() })).data || []); } catch { /* optional */ } })(); }, [token]);
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -193,6 +204,8 @@ function AdModal({ ad, token, tell, close, done }) {
       if (f.startsAt) body.append("startsAt", f.startsAt);
       body.append("endsAt", f.endsAt || "");
       body.append("targetLocations", JSON.stringify(locs));
+      body.append("placements", JSON.stringify(placements));
+      body.append("product", product);
       body.append("draft", String(draft));
       if (file) body.append("image", file);
       await api(ad ? `/api/shop/ads/${ad._id}` : "/api/shop/ads", { token: await token(), method: ad ? "PUT" : "POST", body });
@@ -208,6 +221,8 @@ function AdModal({ ad, token, tell, close, done }) {
       <div><label className="label">Description</label><textarea rows="3" className="input mt-1 w-full" value={f.description} onChange={set("description")}/></div>
       <div className="grid gap-4 sm:grid-cols-2"><div><label className="label">Starts</label><input type="date" className="input mt-1 w-full" value={f.startsAt} onChange={set("startsAt")}/></div><div><label className="label">Ends</label><input type="date" className="input mt-1 w-full" value={f.endsAt} onChange={set("endsAt")}/></div></div>
       <div><label className="label">Show in (none = everywhere)</label><div className="mt-2 flex flex-wrap gap-2">{meta.locations.map((l) => <button type="button" key={l} onClick={() => setLocs((c) => c.includes(l) ? c.filter((x) => x !== l) : [...c, l])} className={cx("rounded-full border px-3 py-1.5 text-xs font-bold", locs.includes(l) ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600")}>{l}</button>)}</div></div>
+      <div><label className="label">Where should it appear?</label><div className="mt-2"><PlacementPicker value={placements} onChange={setPlacements}/></div></div>
+      <div><label className="label">Link to one of your products (optional)</label><select className="input mt-1 w-full" value={product} onChange={(e) => setProduct(e.target.value)}><option value="">Link to my shop</option>{myProducts.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
       <div><label className="label">Image</label>{ad?.image && !file && <img src={ad.image} className="mt-2 h-24 rounded-lg object-cover" alt=""/>}
         <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{file ? file.name : "Choose an image"}<input className="hidden" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)}/></label></div>
     </div>
@@ -215,16 +230,67 @@ function AdModal({ ad, token, tell, close, done }) {
   </div></div>;
 }
 
-/* ----------------------------------------------------------- Settlements */
-function Settlements({ token, tell }) {
-  const { data, loading } = useList("/api/shop/settlements", {}, token, tell);
+/* --------------------------------------------------------------- Payouts */
+const settleTone = (s) => ({ paid: "green", pending: "amber", void: "gray" })[s] || "gray";
+
+function Payouts({ token, tell }) {
+  const [info, setInfo] = useState(null);
+  const [editAccount, setEditAccount] = useState(false);
+  const [acct, setAcct] = useState({});
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const list = useList("/api/shop/settlements", {}, token, tell);
+  const load = useCallback(async () => { try { setInfo((await api("/api/shop/payouts", { token: await token() })).data); } catch (e) { tell(e.message, "error"); } }, [token, tell]);
+  useEffect(() => { load(); }, [load]);
+  if (!info) return <Loading/>;
+  const u = info.unsettled;
+  const setA = (k) => (e) => setAcct((a) => ({ ...a, [k]: e.target.value }));
+
+  const saveAccount = async (e) => {
+    e.preventDefault(); setBusy(true);
+    try { await api("/api/shop/payout-account", { token: await token(), method: "PUT", body: acct }); tell("Payout account saved."); setEditAccount(false); await load(); } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
+  };
+  const request = async () => {
+    setBusy(true);
+    try { await api("/api/shop/payout-requests", { token: await token(), method: "POST", body: { note } }); tell("Payout requested. The store team has been notified."); setNote(""); await load(); } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
+  };
+  const view = async (s) => { try { setDetail((await api(`/api/shop/settlements/${s._id}`, { token: await token() })).data); } catch (e) { tell(e.message, "error"); } };
+  const exp = async () => { try { await download("/api/shop/settlements/export.csv", await token(), "my-payouts.csv"); } catch (e) { tell(e.message, "error"); } };
+  const openRequest = info.requests.find((r) => r.status === "open");
+
   return <>
-    <div className="mb-6"><h2 className="text-2xl font-extrabold">Payouts</h2><p className="mt-1 text-sm text-slate-500">Settlements created by the store team for your delivered orders.</p></div>
-    {loading ? <Loading/> : !data.length ? <Empty title="No payouts yet" detail="Settlements appear here after your orders are delivered and reconciled."/> :
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-4">Period</th><th className="px-5 py-4">Orders</th><th className="px-5 py-4">Sales</th><th className="px-5 py-4">Commission</th><th className="px-5 py-4">Net payable</th><th className="px-5 py-4">Status</th></tr></thead>
-        <tbody className="divide-y divide-slate-100">{data.map((s) => <tr key={s._id}><td className="px-5 py-4">{day(s.periodFrom)} – {day(s.periodTo)}</td><td className="px-5 py-4">{s.ordersCount}</td><td className="px-5 py-4">{money(s.grossSales)}</td><td className="px-5 py-4">{money(s.commission)}</td><td className="px-5 py-4 font-bold">{money(s.netPayable)}</td>
-          <td className="px-5 py-4"><Pill tone={s.status === "paid" ? "green" : "amber"}>{s.status}</Pill>{s.status === "paid" && <p className="mt-1 text-xs text-slate-500">{day(s.paidAt)}{s.reference ? ` · ${s.reference}` : ""}</p>}</td></tr>)}</tbody></table></div></div>}
+    <div className="mb-6"><h2 className="text-2xl font-extrabold">Payouts</h2><p className="mt-1 text-sm text-slate-500">Money from delivered and paid orders, minus the platform commission ({+(info.commissionRate * 100).toFixed(2)}%{info.commissionIsCustom ? ", your special rate" : ""}).</p></div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Stat label="Ready to be paid" value={money(u.net)} tone="green" hint={`${u.orders} orders · sales ${money(u.grossSales)} − commission ${money(u.commission)}`}/>
+      <Stat label="On the way to you" value={money(info.pendingPayout.amount)} tone="amber" hint={`${info.pendingPayout.count} settlement(s) being paid`}/>
+      <Stat label="Paid out so far" value={money(info.paidOut.amount)} hint={`Commission paid ${money(info.paidOut.commissionPaid)}`}/>
+      <Stat label="Still being delivered" value={money(info.awaitingDelivery.amount)} hint={`${info.awaitingDelivery.orders} open orders`}/></div>
+
+    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6"><h3 className="font-extrabold">Request a payout</h3>
+        <p className="mt-1 text-sm text-slate-500">{u.orders ? `${u.orders} delivered orders (${money(u.codAmount)} of it was cash on delivery) are waiting. Ask the store team to settle them now.` : "Nothing to request yet. Delivered and paid orders show up here."}</p>
+        {openRequest ? <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Request sent {day(openRequest.createdAt)}. You'll get a notification when it's paid.</p> : <>
+          <input className="input mt-4 w-full" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)}/>
+          <button disabled={busy || !info.canRequest || !info.payoutAccount} onClick={request} className="btn-primary mt-3">Request payout</button>
+          {!info.payoutAccount && <p className="mt-2 text-xs text-red-600">Add your payout account first.</p>}</>}
+        {info.requests.filter((r) => r.status !== "open").slice(0, 3).map((r) => <p key={r._id} className="mt-3 text-xs text-slate-500">{day(r.createdAt)} · {r.status}{r.resolutionNote ? ` — ${r.resolutionNote}` : ""}</p>)}</div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6"><div className="flex items-center justify-between"><h3 className="font-extrabold">Where we pay you</h3>{!editAccount && <button onClick={() => { setAcct({}); setEditAccount(true); }} className="btn-secondary px-3 py-2 text-xs">{info.payoutAccount ? "Change" : "Add account"}</button>}</div>
+        {!editAccount ? (info.payoutAccount ? <div className="mt-3 text-sm text-slate-600">{info.payoutAccount.method === "upi" ? <p><b>UPI:</b> {info.payoutAccount.upiId}</p> : <><p><b>{info.payoutAccount.accountHolder}</b></p><p>{info.payoutAccount.bankName ? `${info.payoutAccount.bankName} · ` : ""}{info.payoutAccount.accountNumber} · {info.payoutAccount.ifsc}</p></>}</div> : <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">No payout account yet — we can't send your money without one.</p>)
+          : <form onSubmit={saveAccount} className="mt-4 space-y-4"><PayoutFields f={acct} set={setA}/><div className="flex gap-2"><button disabled={busy || !acct.method} className="btn-primary px-4 py-2">Save</button><button type="button" onClick={() => setEditAccount(false)} className="btn-secondary px-4 py-2">Cancel</button></div></form>}</div>
+    </div>
+
+    <div className="mb-3 mt-8 flex items-center justify-between"><h3 className="font-extrabold">Settlement history</h3><button onClick={exp} className="btn-secondary px-3 py-2 text-xs"><Download size={14}/> Export CSV</button></div>
+    {list.loading ? <Loading/> : !list.data.length ? <Empty title="No payouts yet" detail="Settlements appear here after your orders are delivered and reconciled."/> :
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-4">Period</th><th className="px-5 py-4">Orders</th><th className="px-5 py-4">Sales</th><th className="px-5 py-4">Commission</th><th className="px-5 py-4">Adjustment</th><th className="px-5 py-4">You get</th><th className="px-5 py-4">Status</th></tr></thead>
+        <tbody className="divide-y divide-slate-100">{list.data.map((s) => <tr key={s._id}><td className="px-5 py-4"><button onClick={() => view(s)} className="font-semibold text-indigo-600">{day(s.periodFrom)} – {day(s.periodTo)}</button></td><td className="px-5 py-4">{s.ordersCount}</td><td className="px-5 py-4">{money(s.grossSales)}</td><td className="px-5 py-4">{money(s.commission)}</td><td className="px-5 py-4">{s.adjustment ? <span title={s.adjustmentNote}>{money(s.adjustment)}</span> : "—"}</td><td className="px-5 py-4 font-bold">{money(s.netPayable)}</td>
+          <td className="px-5 py-4"><Pill tone={settleTone(s.status)}>{s.status}</Pill>{s.status === "paid" && <p className="mt-1 text-xs text-slate-500">{day(s.paidAt)}{s.reference ? ` · ${s.reference}` : ""}</p>}</td></tr>)}</tbody></table></div></div>}
+    {detail && <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-slate-950/50 p-4"><div className="my-8 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><h2 className="text-lg font-extrabold">Settlement details</h2><button onClick={() => setDetail(null)}>✕</button></div>
+      <p className="mt-1 text-sm text-slate-500">{day(detail.periodFrom)} – {day(detail.periodTo)} · {detail.ordersCount} orders · <Pill tone={settleTone(detail.status)}>{detail.status}</Pill></p>
+      <div className="mt-4 space-y-1 text-sm"><div className="flex justify-between"><span>Sales</span><b>{money(detail.grossSales)}</b></div><div className="flex justify-between"><span>Commission ({+(detail.commissionRate * 100).toFixed(2)}%)</span><b>− {money(detail.commission)}</b></div>{detail.adjustment ? <div className="flex justify-between"><span>Adjustment{detail.adjustmentNote ? ` (${detail.adjustmentNote})` : ""}</span><b>{money(detail.adjustment)}</b></div> : null}<div className="flex justify-between border-t border-slate-100 pt-2 text-base"><span>You get</span><b>{money(detail.netPayable)}</b></div></div>
+      <div className="mt-4 max-h-56 space-y-1 overflow-y-auto text-xs text-slate-600">{(detail.orders || []).map((o) => <div key={o._id} className="flex justify-between"><span>{o.orderNumber} · {day(o.deliveredAt)}</span><span>{money(o.subtotal)}{o.paymentMethod === "cod" ? " · COD" : ""}</span></div>)}</div></div></div>}
   </>;
 }
 

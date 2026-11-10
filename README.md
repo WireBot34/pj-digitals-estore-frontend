@@ -41,3 +41,10 @@ Full endpoint list: `API.md` in the backend project.
 - If the backend sets `CLIENT_URL`, include this app's origin (e.g. `http://localhost:5173`) and your deployed domain.
 - The Clerk publishable key must belong to the same Clerk application as the backend's secret key.
 - Razorpay: the backend needs `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`; otherwise `/api/meta` reports online payments as off and checkout only offers cash on delivery (if `ALLOW_COD` isn't `false`).
+
+## v5 additions
+- Ads show in 4 places: home banner carousel, /shop strip, /shops strip, product page; views and clicks are tracked.
+- Admin console: Overview, Products, Orders, Deliveries, Shops (create/edit/manage-as), Delivery partners, Users (block/role), Advertisements, Payouts (owed, settlements, requests, drivers & COD, reports/CSV), Support, Activity log, Settings + broadcast.
+- "Manage shop" / "Manage jobs" opens the real shop-owner / delivery workspace as that account (banner "Admin mode", button "Back to admin").
+- Shop workspace: payout account, payout requests, settlement detail, CSV, ad placements and stats, Help. Delivery workspace: Earnings tab (fees, COD, settlements, payout account), Help.
+- Customers: /support page (Help) and storefront announcement banner.
