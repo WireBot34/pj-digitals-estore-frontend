@@ -1,0 +1,5 @@
+allowBuilds:
+  '@clerk/shared': false
+  esbuild: false
+minimumReleaseAgeExclude:
+  - '@rollup/rollup-android-arm-eabi@4.68.1'
