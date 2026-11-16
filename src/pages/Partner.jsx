@@ -37,7 +37,7 @@ const canOpen = (me, e) =>
 export function PartnerBanner({ me }) {
   const list = entries(me);
   if (!list.length) return null;
-  return <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl space-y-1 px-5 py-2">
+  return <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl space-y-1 px-4 py-2 sm:px-6">
     {list.map((e) => <p key={e.kind} className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
       <Pill tone={TONE[e.status]}>{e.status}</Pill>
       <span>{MESSAGES[e.kind][e.status]}{e.reason && ["rejected", "suspended"].includes(e.status) ? ` Reason: ${e.reason}` : ""}</span>
@@ -148,11 +148,11 @@ function DriverForm({ token, tell, onDone }) {
 
 /** /partner - apply to sell or deliver, and see the state of existing applications. */
 export function Partner({ token, signedIn, me, refreshMe, tell }) {
-  if (!signedIn) return <main className="mx-auto max-w-3xl px-5 py-16"><AuthPrompt/></main>;
+  if (!signedIn) return <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-16"><AuthPrompt/></main>;
   const shop = entries(me).find((e) => e.kind === "shop");
   const driver = entries(me).find((e) => e.kind === "delivery");
-  return <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-    <div><h1 className="font-display text-4xl font-extrabold">Work with us</h1><p className="mt-2 text-slate-500">Sell your products or deliver orders in Thodupuzha and Muttom.</p></div>
+  return <main className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
+    <div><h1 className="font-display text-2xl font-bold sm:text-3xl">Work with us</h1><p className="mt-2 text-slate-500">Sell your products or deliver orders in Thodupuzha and Muttom.</p></div>
     {shop ? <StatusCard icon={Store} title="Your shop" entry={shop} me={me}/> : <ShopForm token={token} tell={tell} onDone={refreshMe}/>}
     {driver ? <StatusCard icon={Truck} title="Your delivery profile" entry={driver} me={me}/> : <DriverForm token={token} tell={tell} onDone={refreshMe}/>}
   </main>;
