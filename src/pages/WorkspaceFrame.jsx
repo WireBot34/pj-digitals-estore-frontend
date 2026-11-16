@@ -6,15 +6,20 @@ import { Pill, cx } from "../ui";
 
 /** Shared page chrome for the shop-owner and delivery-partner workspaces. */
 export function WorkspaceFrame({ title, subtitle, tabs, tab, setTab, actions, token, children, exit }) {
-  return <div className="min-h-screen bg-[#f5f6fa]">
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-3">
-        <div className="min-w-0"><p className="font-display text-lg font-extrabold">PJ<span className="text-indigo-600">.</span>DIGITALS{exit && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 align-middle text-[10px] font-bold uppercase text-amber-800">Admin mode</span>}</p><p className="truncate text-xs text-slate-500">{title}{subtitle ? ` · ${subtitle}` : ""}</p></div>
-        <div className="flex flex-wrap items-center gap-3">{actions}{exit ? <button onClick={exit} className="rounded-full bg-indigo-600 px-4 py-2 text-xs font-bold text-white">← Back to admin</button> : <><NotificationBell token={token}/><Link to="/" className="btn-secondary px-3 py-2 text-xs">Open store</Link><UserButton afterSignOutUrl="/"/></>}</div>
+  return <div className="min-h-screen bg-paper">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-paper">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-display text-base font-bold sm:text-lg">PJ Digitals{exit && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">Admin mode</span>}</p>
+          <p className="truncate text-xs text-slate-500">{title}{subtitle ? ` · ${subtitle}` : ""}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">{actions}{exit
+          ? <button onClick={exit} className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white sm:px-4">Back to admin</button>
+          : <><NotificationBell token={token}/><Link to="/" className="btn-secondary px-3 py-2 text-xs">Open store</Link><UserButton afterSignOutUrl="/"/></>}</div>
       </div>
-      <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-5">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={cx("whitespace-nowrap border-b-2 px-4 py-3 text-sm font-bold", tab === key ? "border-indigo-600 text-indigo-600" : "border-transparent text-slate-500 hover:text-slate-800")}>{label}</button>)}</nav>
+      <nav aria-label="Sections" className="no-scrollbar mx-auto flex max-w-6xl gap-1 overflow-x-auto px-3 sm:px-5">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} aria-current={tab === key ? "page" : undefined} className={cx("shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold sm:px-4", tab === key ? "border-brand-600 text-slate-950" : "border-transparent text-slate-500 hover:text-slate-800")}>{label}</button>)}</nav>
     </header>
-    <main className="mx-auto max-w-6xl p-5 md:p-8">{children}</main>
+    <main className="mx-auto max-w-6xl p-4 pb-[calc(2rem+var(--safe-bottom))] sm:p-6 md:p-8">{children}</main>
   </div>;
 }
 
