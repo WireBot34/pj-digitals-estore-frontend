@@ -22,11 +22,25 @@ const ACTIONS = {
   on_the_way: [["delivered", "Mark delivered"], ["failed", "Can't deliver", true]],
 };
 
+/** Keeps the phone screen on while live location is being shared (the browser stops sharing when the screen sleeps). */
+function useWakeLock(on) {
+  useEffect(() => {
+    if (!on || !("wakeLock" in navigator)) return undefined;
+    let lock = null, done = false;
+    const get = async () => { try { lock = await navigator.wakeLock.request("screen"); } catch { /* not allowed right now */ } };
+    const onVisible = () => { if (document.visibilityState === "visible" && !done) get(); };
+    get();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { done = true; document.removeEventListener("visibilitychange", onVisible); lock?.release?.().catch(() => {}); };
+  }, [on]);
+}
+
 export function DeliveryWorkspace({ token, me, refreshMe, tell, exit }) {
   const partner = me?.deliveryPartner;
   const [tab, setTab] = useState("active");
   const [available, setAvailable] = useState(!!partner?.isAvailable);
   const [share, setShare] = useState(false);
+  useWakeLock(share);
   const approved = partner?.status === "approved" || (!!exit && !!partner);
 
   useEffect(() => setAvailable(!!partner?.isAvailable), [partner?.isAvailable]);

@@ -1,10 +1,10 @@
-import React from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { SignInButton } from "@clerk/clerk-react";
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Package, ShieldCheck, Star, X } from "lucide-react";
+import { AlertCircle, ArrowUp, Check, CheckCircle2, ChevronLeft, ChevronRight, Package, RefreshCw, ShieldCheck, Star, WifiOff, X } from "lucide-react";
 
 export const cx = (...a) => a.filter(Boolean).join(" ");
 
-/** Toast: top on desktop, above the bottom tab bar on phones. */
+/** Toast: top on desktop, above the bottom tab bar on phones. May carry one action, e.g. "Undo" or "View cart". */
 export function Notice({ notice, clear }) {
   if (!notice) return null;
   const bad = notice.type === "error";
@@ -12,7 +12,8 @@ export function Notice({ notice, clear }) {
     <div className={cx("pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-lg border px-4 py-3 shadow-lg md:w-auto", bad ? "border-red-200 bg-red-50 text-red-900" : "border-brand-200 bg-brand-50 text-brand-900")}>
       {bad ? <AlertCircle size={18} className="mt-0.5 shrink-0"/> : <CheckCircle2 size={18} className="mt-0.5 shrink-0"/>}
       <p className="flex-1 text-sm font-medium">{notice.text}</p>
-      <button onClick={clear} aria-label="Dismiss" className="-m-1 p-1"><X size={16}/></button>
+      {notice.action && <button onClick={() => { notice.action.onClick(); clear(); }} className="shrink-0 text-sm font-semibold underline underline-offset-2">{notice.action.label}</button>}
+      <button onClick={clear} aria-label="Dismiss" className="-m-1 shrink-0 p-1"><X size={16}/></button>
     </div>
   </div>;
 }
@@ -77,3 +78,105 @@ export function Page({ children, narrow = false, className = "" }) {
 }
 
 export const PageTitle = ({ children, sub, right }) => <div className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8"><div><h1 className="font-display text-2xl font-bold sm:text-3xl">{children}</h1>{sub && <p className="mt-1 text-sm text-slate-500">{sub}</p>}</div>{right}</div>;
+
+
+/* -------------------------------------------------------------- page title */
+/** Sets the browser tab title (also what shows in history and when sharing). */
+export function usePageTitle(title) {
+  useEffect(() => {
+    document.title = title ? `${title} · PJ Digitals` : "PJ Digitals · Shop from local stores";
+  }, [title]);
+}
+
+/* ------------------------------------------------------------ confirm sheet */
+const ConfirmContext = createContext(() => Promise.resolve(false));
+export const useConfirm = () => useContext(ConfirmContext);
+
+/**
+ * Replaces the browser's confirm() popup.
+ *   const confirm = useConfirm();
+ *   if (!(await confirm({ title: "Cancel this order?", message: "...", confirmLabel: "Cancel order", tone: "danger" }))) return;
+ */
+export function ConfirmProvider({ children }) {
+  const [ask, setAsk] = useState(null);
+  const confirm = useCallback((opts = {}) => new Promise((resolve) => setAsk({ ...opts, resolve })), []);
+  const done = (value) => { ask?.resolve(value); setAsk(null); };
+  const okRef = useRef(null);
+  useEffect(() => {
+    if (!ask) return undefined;
+    const previous = document.activeElement;
+    okRef.current?.focus();
+    const onKey = (e) => { if (e.key === "Escape") done(false); };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
+  }, [ask]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <ConfirmContext.Provider value={confirm}>
+    {children}
+    {ask && <div className="fixed inset-0 z-[120] grid place-items-end bg-black/45 sm:place-items-center sm:p-4" onClick={() => done(false)}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-xl" style={{ paddingBottom: "calc(1.25rem + var(--safe-bottom))" }}>
+        <h2 id="confirm-title" className="font-display text-lg font-bold">{ask.title || "Are you sure?"}</h2>
+        {ask.message && <p className="mt-2 text-sm text-slate-600">{ask.message}</p>}
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button onClick={() => done(false)} className="btn-secondary">{ask.cancelLabel || "Keep it"}</button>
+          <button ref={okRef} onClick={() => done(true)} className={cx("inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-semibold text-white", ask.tone === "danger" ? "bg-red-700 hover:bg-red-800" : "bg-brand-600 hover:bg-brand-700")}>{ask.confirmLabel || "Confirm"}</button>
+        </div>
+      </div>
+    </div>}
+  </ConfirmContext.Provider>;
+}
+
+/* ------------------------------------------------------------- error states */
+export function ErrorState({ title = "Could not load this", detail = "Check your connection and try again.", onRetry }) {
+  return <div className="rounded-xl border border-slate-200 bg-white px-6 py-10 text-center" role="alert">
+    <AlertCircle className="mx-auto text-red-700" size={28} strokeWidth={1.5}/>
+    <h3 className="mt-3 font-semibold text-slate-900">{title}</h3>
+    <p className="mx-auto mt-1 max-w-sm text-sm text-slate-500">{detail}</p>
+    {onRetry && <button onClick={onRetry} className="btn-secondary mt-5"><RefreshCw size={16}/> Try again</button>}
+  </div>;
+}
+
+/** Thin banner shown while the device has no connection. */
+export function OfflineBanner() {
+  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  useEffect(() => {
+    const up = () => setOnline(true), down = () => setOnline(false);
+    window.addEventListener("online", up); window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, []);
+  if (online) return null;
+  return <div role="status" className="flex items-center justify-center gap-2 bg-amber-100 px-4 py-2 text-center text-xs font-medium text-amber-900 sm:text-sm"><WifiOff size={15}/> You are offline. Some things may not load or save until you reconnect.</div>;
+}
+
+/** Floating button that appears after scrolling down a long page. */
+export function BackToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 700);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  if (!show) return null;
+  return <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top" className="fixed bottom-[calc(5rem+var(--safe-bottom))] right-4 z-30 grid h-11 w-11 place-items-center rounded-full border border-slate-300 bg-white shadow-lg hover:bg-slate-50 md:bottom-6"><ArrowUp size={18}/></button>;
+}
+
+/* ------------------------------------------------------------- step progress */
+/** Cart > Checkout > Done indicator. current: 0, 1 or 2. */
+export function Steps({ current = 0, labels = ["Cart", "Checkout", "Done"] }) {
+  return <ol className="mb-6 flex items-center gap-2 text-xs font-medium sm:text-sm" aria-label="Progress">
+    {labels.map((label, i) => <li key={label} className="flex items-center gap-2" aria-current={i === current ? "step" : undefined}>
+      <span className={cx("grid h-6 w-6 place-items-center rounded-full text-[11px] font-bold", i < current ? "bg-brand-600 text-white" : i === current ? "bg-ink text-white" : "bg-slate-200 text-slate-500")}>{i < current ? <Check size={13}/> : i + 1}</span>
+      <span className={i <= current ? "text-slate-900" : "text-slate-400"}>{label}</span>
+      {i < labels.length - 1 && <span className="mx-1 h-px w-5 bg-slate-300 sm:w-8"/>}
+    </li>)}
+  </ol>;
+}
+
+/* ------------------------------------------------------------------- logo */
+/** Simple logo mark: swap this one component when you have a real logo. */
+export function Logo({ className = "" }) {
+  return <span className={cx("inline-flex items-center gap-2", className)}>
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="rgb(var(--brand-600))"/><path d="M9 24V8h7a5 5 0 0 1 0 10H9" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="23.5" cy="22.5" r="2" fill="#fff"/></svg>
+    <span className="font-display text-lg font-bold tracking-tight text-slate-950 sm:text-xl">PJ Digitals</span>
+  </span>;
+}

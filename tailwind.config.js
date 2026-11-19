@@ -6,10 +6,8 @@ import colors from "tailwindcss/colors";
  * is changed here: `slate` becomes a warm stone neutral, `indigo` becomes the brand green,
  * and corners are tightened. No page needs to know the palette changed.
  */
-const brand = {
-  50: "#eef6f1", 100: "#d9eadf", 200: "#b6d5c2", 300: "#88b99c", 400: "#559874",
-  500: "#2f7a56", 600: "#1f6a49", 700: "#195539", 800: "#154430", 900: "#10372a", 950: "#09201a",
-};
+// Channels live in CSS variables (see :root in src/index.css) so src/theme.js can retint the whole site by season.
+const brand = Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((k) => [k, `rgb(var(--brand-${k}) / <alpha-value>)`]));
 
 /** @type {import('tailwindcss').Config} */
 export default {

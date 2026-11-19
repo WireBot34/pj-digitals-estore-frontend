@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root{
+  --brand-50:238 246 241;--brand-100:217 234 223;--brand-200:182 213 194;--brand-300:136 185 156;--brand-400:85 152 116;--brand-500:47 122 86;--brand-600:31 106 73;--brand-700:25 85 57;--brand-800:21 68 48;--brand-900:16 55 42;--brand-950:9 32 26;
   font-family:"Hanken Grotesk",system-ui,sans-serif;
   color:#1c1b18;background:#f6f4ef;
   font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;
@@ -15,8 +16,9 @@ img{max-width:100%}
 button,a,input,select,textarea{font:inherit}
 button{cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
-:focus-visible{outline:2px solid #1f6a49;outline-offset:2px}
-::selection{background:#d9eadf}
+/* skip link and focus ring */
+:focus-visible{outline:2px solid rgb(var(--brand-600));outline-offset:2px}
+::selection{background:rgb(var(--brand-100))}
 .price{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 
 @layer components{
@@ -62,4 +64,38 @@ table{border-collapse:collapse}
 }
 
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
-input[type="radio"],input[type="checkbox"]{accent-color:#1f6a49}
+input[type="radio"],input[type="checkbox"]{accent-color:rgb(var(--brand-600))}
+
+/* ---------- Tables become stacked cards on phones (labels come from src/tables.js) ---------- */
+@media (max-width:767px){
+  table.rt{min-width:0!important;width:100%}
+  table.rt thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  table.rt,table.rt tbody{display:block}
+  table.rt tr{display:block;padding:.25rem 0;border-bottom:8px solid rgb(246 244 239)}
+  table.rt tr:last-child{border-bottom:0}
+  table.rt td{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.55rem 1rem!important;text-align:right!important;white-space:normal!important;border:0}
+  table.rt td::before{content:attr(data-label);flex:0 0 38%;max-width:38%;text-align:left;font-size:.7rem;font-weight:600;color:#78716c;padding-top:.15rem}
+  table.rt td[data-label=""]::before{display:none}
+  table.rt td[data-label=""]{justify-content:flex-end;flex-wrap:wrap;gap:.5rem}
+  table.rt td>*{min-width:0;text-align:right}
+  table.rt td .input,table.rt td select{max-width:100%}
+  .overflow-x-auto:has(>table.rt){overflow-x:visible}
+}
+
+/* ---------- Motion and feedback ---------- */
+@keyframes route-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.route-enter{animation:route-in .18s ease-out}
+.btn-primary:active,.btn-secondary:active,.btn-dark:active,.qty:active{transform:scale(.98)}
+.skip-link{position:absolute;left:-9999px;top:0;z-index:200;background:#1c1b18;color:#fff;padding:.6rem 1rem;border-radius:0 0 .5rem 0}
+.skip-link:focus{left:0}
+
+/* ---------- Printing: only the order slip ---------- */
+@media print{
+  body *{visibility:hidden!important}
+  #slip,#slip *{visibility:visible!important}
+  #slip{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;border:0}
+  .no-print{display:none!important}
+}
+
+/* The printable order slip lives off-screen and is revealed only by the print rules above */
+.slip-offscreen{position:fixed;left:-9999px;top:0;width:720px;background:#fff}
