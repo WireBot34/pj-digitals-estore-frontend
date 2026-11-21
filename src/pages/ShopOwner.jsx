@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Download, Edit3, ImagePlus, Plus, Search, Trash2 } from "lucide-react";
-import { api, download, imageOf, money } from "../api";
+import { api, download, imageOf, money, sized } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { useList } from "../useList";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
@@ -108,7 +108,7 @@ function Products({ token, tell }) {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-4">Product</th><th className="px-5 py-4">Category</th><th className="px-5 py-4">Price</th><th className="px-5 py-4">Stock</th><th className="px-5 py-4">Status</th><th className="px-5 py-4 text-right">Actions</th></tr></thead>
         <tbody className="divide-y divide-slate-100">{data.map((p) => <tr key={p._id}>
-          <td className="px-5 py-4"><div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-lg bg-slate-100">{imageOf(p.images) && <img src={imageOf(p.images)} className="h-full w-full object-cover" alt=""/>}</div><span className="font-bold">{p.name}</span></div></td>
+          <td className="px-5 py-4"><div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-lg bg-slate-100">{imageOf(p.images) && <img src={sized(imageOf(p.images), "sm")} className="h-full w-full object-cover" alt=""/>}</div><span className="font-bold">{p.name}</span></div></td>
           <td className="px-5 py-4 text-slate-600">{p.category}</td><td className="px-5 py-4 font-semibold">{money(p.price)}</td>
           <td className="px-5 py-4"><StockCell product={p} token={token} tell={tell} onChanged={reload}/></td>
           <td className="px-5 py-4"><Pill tone={p.isActive ? "green" : "gray"}>{p.isActive ? "Active" : "Hidden"}</Pill></td>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { api } from "./api";
+import { api, sized } from "./api";
 import { cx } from "./ui";
 
 const linkOf = (ad) => (ad.product ? `/product/${ad.product}` : `/shop?shop=${ad.shop?._id || ""}`);
@@ -65,7 +65,7 @@ export function AdStrip({ placement, shop, title = "Offers from local shops", cl
   return <section className={cx("mb-8", className)}>
     <p className="text-sm font-semibold text-slate-700">{title}</p>
     <div className="no-scrollbar -mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">{ads.map((ad) => <Link key={ad._id} to={linkOf(ad)} onClick={() => click(ad)} className="relative w-[78%] max-w-[300px] shrink-0 snap-start overflow-hidden rounded-xl border border-slate-200 bg-white sm:w-[280px]">
-      {ad.image && <img src={ad.image} alt={ad.title} loading="lazy" className="h-28 w-full object-cover sm:h-32"/>}
+      {ad.image && <img src={sized(ad.image, "md")} alt={ad.title} loading="lazy" className="h-28 w-full object-cover sm:h-32"/>}
       <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-800">Ad</span>
       <div className="p-3.5"><h3 className="line-clamp-1 text-sm font-semibold">{ad.title}</h3>{ad.description && <p className="mt-1 line-clamp-2 text-sm text-slate-600">{ad.description}</p>}{ad.shop && <p className="mt-2 text-xs font-medium text-brand-700">{ad.shop.name}{ad.shop.location ? `, ${ad.shop.location}` : ""}</p>}</div>
     </Link>)}</div>
