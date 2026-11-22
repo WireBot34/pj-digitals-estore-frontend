@@ -437,6 +437,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
           <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl">{p.name}</h1>
           <button onClick={share} aria-label="Share this product" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50"><Share2 size={18}/></button>
         </div>
+        {(p.brand || p.unit) && <p className="mt-1 text-sm text-slate-500">{[p.brand, p.unit].filter(Boolean).join(" · ")}</p>}
         {p.ratings?.count > 0 && <div className="mt-2 flex items-center gap-2 text-sm text-slate-600"><Stars value={p.ratings.average} size={16}/>{p.ratings.average} <span className="text-slate-400">({p.ratings.count})</span></div>}
         <p className="price mt-4 flex flex-wrap items-baseline gap-x-3 text-3xl font-bold">
           {money(p.price)}

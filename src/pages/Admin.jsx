@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { UserButton } from "@clerk/clerk-react";
-import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, LifeBuoy, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Trash2, Truck, UserCog, Users, X } from "lucide-react";
+import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Trash2, Truck, UserCog, Users, X } from "lucide-react";
 import { api, imageOf, money, qs, setActAs, sized } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
 import { useList } from "../useList";
+import { ScanModal, canScan } from "../scanner";
 import { DriversAdmin, ShopsAdmin, Users as UsersAdmin } from "./admin/people";
 import { Payouts } from "./admin/money";
 import { Activity, AdsAdmin, AssignDriver, DeliveriesAdmin, SettingsAdmin } from "./admin/ops";
@@ -123,12 +124,15 @@ function ProductTable({ products, onEdit, onDelete }) {
   return <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-4">Product</th><th className="px-5 py-4">Shop</th><th className="px-5 py-4">Category</th><th className="px-5 py-4">Price</th><th className="px-5 py-4">Stock</th><th className="px-5 py-4">Status</th><th className="px-5 py-4 text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{products.map((p) => <tr key={p._id}><td className="px-5 py-4"><div className="flex items-center gap-3"><img src={sized(imageOf(p.images), "sm")} className="h-11 w-11 rounded-lg bg-slate-100 object-cover" alt=""/><div><p className="font-bold">{p.name}</p><p className="text-xs text-slate-400">{p._id}</p></div></div></td><td className="px-5 py-4 text-slate-500">{p.shop?.name || "Platform"}</td><td className="px-5 py-4 text-slate-500">{p.category}</td><td className="px-5 py-4 font-bold">{money(p.price)}</td><td className="px-5 py-4">{p.stock}</td><td className="px-5 py-4"><Pill tone={p.isActive ? "green" : "gray"}>{p.isActive ? "Active" : "Inactive"}</Pill></td><td className="px-5 py-4"><div className="flex justify-end gap-2"><button onClick={() => onEdit(p)} className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50"><Edit3 size={15}/></button><button onClick={() => onDelete(p._id)} className="rounded-lg border border-red-100 p-2 text-red-600 hover:bg-red-50"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div>{!products.length && <div className="p-10"><Empty title="No products found" detail="Add a product to populate the store."/></div>}</div>;
 }
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024; // the server shrinks photos, so phone-sized files are fine
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-export function ProductModal({ product, token, close, save, tell, owner = false }) {
+export function ProductModal({ product, token, close, save, tell, owner = false, onOpenExisting, initialBarcode = "" }) {
   const meta = useMeta();
-  const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isActive: product?.isActive !== false, shop: product?.shop?._id || product?.shop || "" });
+  const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isActive: product?.isActive !== false, shop: product?.shop?._id || product?.shop || "", barcode: product?.barcode || initialBarcode, sku: product?.sku || "", brand: product?.brand || "", unit: product?.unit || "", costPrice: product?.costPrice ?? "" });
+  const [found, setFound] = useState(null); // result of the barcode lookup: { inShop, catalog }
+  const [scanning, setScanning] = useState(false);
+  const [catalogImage, setCatalogImage] = useState(""); // picture borrowed from the shared catalogue
   const [existing, setExisting] = useState(product?.images || []);
   const [files, setFiles] = useState([]);
   const [shops, setShops] = useState([]);
@@ -140,20 +144,42 @@ export function ProductModal({ product, token, close, save, tell, owner = false 
     (async () => { try { const r = await api("/api/admin/shops" + qs({ status: "approved", limit: 100 }), { token: await token() }); setShops(r.data || []); } catch { /* optional */ } })();
   }, [owner, token]);
 
+  // Look the barcode up in my shop and in the shared catalogue; fill empty fields from the catalogue.
+  const lookup = async (raw) => {
+    const code = String(raw || "").trim();
+    if (!owner || code.length < 3) { setFound(null); return; }
+    try {
+      const r = (await api(`/api/shop/inventory/lookup?barcode=${encodeURIComponent(code)}`, { token: await token() })).data;
+      setFound(r);
+      if (r.inShop && r.inShop._id === product?._id) return;
+      if (!product && r.catalog && !r.inShop) {
+        const c = r.catalog;
+        setForm((f) => ({ ...f, barcode: code, name: f.name || c.name || "", description: f.description || c.description || "", brand: f.brand || c.brand || "", unit: f.unit || c.unit || "", comparePrice: f.comparePrice === "" && c.mrp != null ? c.mrp : f.comparePrice, category: f.category === "Other" && c.category ? c.category : f.category }));
+        if (c.image && !existing.length && !files.length) setCatalogImage(c.image);
+      }
+    } catch (e) { setFound(null); if (e.status !== 400) tell(e.message, "error"); }
+  };
+  useEffect(() => { if (initialBarcode) lookup(initialBarcode); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const onScanned = (code) => { setScanning(false); setForm((f) => ({ ...f, barcode: code })); lookup(code); };
+  const margin = (() => { const p = Number(form.price), c = Number(form.costPrice); return form.costPrice !== "" && p > 0 && Number.isFinite(c) ? { amount: p - c, pct: ((p - c) / p) * 100 } : null; })();
+
   const pickFiles = (e) => {
     const chosen = Array.from(e.target.files || []).slice(0, Math.max(0, 5 - existing.length));
     const bad = chosen.find((f) => !IMAGE_TYPES.includes(f.type) || f.size > MAX_IMAGE_BYTES);
-    if (bad) { tell(`"${bad.name}" must be a JPG, PNG, WEBP or AVIF image under 5 MB.`, "error"); e.target.value = ""; return; }
+    if (bad) { tell(`"${bad.name}" must be a JPG, PNG, WEBP or AVIF image under 12 MB.`, "error"); e.target.value = ""; return; }
     setFiles(chosen);
   };
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!existing.length && !files.length) { tell("Add at least one product image.", "error"); return; }
+    if (!existing.length && !files.length && !catalogImage) { tell("Add at least one product image.", "error"); return; }
     setSaving(true);
     const fd = new FormData();
     ["name", "description", "price", "stock", "category", ...(owner ? [] : ["isFeatured"]), "isActive"].forEach((k) => fd.append(k, String(form[k])));
     if (form.comparePrice !== "") fd.append("comparePrice", String(form.comparePrice));
+    ["barcode", "sku", "brand", "unit"].forEach((k) => fd.append(k, form[k].trim())); // empty = clear it
+    if (owner) fd.append("costPrice", String(form.costPrice).trim());
+    if (catalogImage && !product && !files.length) fd.append("catalogBarcode", form.barcode.trim());
     fd.append("sizes", JSON.stringify(form.sizes.split(",").map((s) => s.trim()).filter(Boolean)));
     if (!owner) fd.append("shop", form.shop);
     // always send the kept images (even an empty list) so removals take effect
@@ -165,21 +191,32 @@ export function ProductModal({ product, token, close, save, tell, owner = false 
 
   return <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-slate-950/50 p-4"><form onSubmit={submit} className="my-8 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><h2 className="text-xl font-extrabold">{product ? "Edit product" : "Add product"}</h2><p className="mt-1 text-xs text-slate-500">Product details and image uploads.</p></div><button type="button" onClick={close}><X/></button></div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div className="sm:col-span-2"><label className="label">Barcode {owner && <span className="font-normal text-slate-400">— scan it to fill in known details</span>}</label>
+        <div className="flex gap-2"><input className="input w-full" name="barcode" inputMode="text" autoComplete="off" placeholder="Scan or type the barcode" value={form.barcode} onChange={change} onBlur={(e) => lookup(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookup(form.barcode); } }}/>
+          {canScan() && <button type="button" onClick={() => setScanning(true)} className="btn-secondary shrink-0 px-3" aria-label="Scan with camera"><ScanLine size={18}/></button>}</div>
+        {found?.inShop && found.inShop._id !== product?._id && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">You already sell this: <b>{found.inShop.name}</b> ({found.inShop.stock} in stock). {onOpenExisting ? <button type="button" onClick={() => onOpenExisting(found.inShop)} className="font-bold underline">Open it instead</button> : "Edit that product instead of adding it twice."}</p>}
+        {!product && found?.catalog && !found.inShop && <p className="mt-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">Found in the shared catalogue. Name, brand, category and MRP are filled in; check them and set your own price.</p>}
+        {!product && found && !found.catalog && !found.inShop && <p className="mt-2 text-xs text-slate-500">New barcode. Fill in the details once and it will be remembered for other shops.</p>}</div>
       <div className="sm:col-span-2"><label className="label">Product name</label><input className="input w-full" name="name" required value={form.name} onChange={change}/></div>
       <div className="sm:col-span-2"><label className="label">Description</label><textarea className="input w-full" rows="3" name="description" required value={form.description} onChange={change}/></div>
-      <div><label className="label">Price (₹)</label><input className="input w-full" type="number" min="0" step="0.01" name="price" required value={form.price} onChange={change}/></div>
-      <div><label className="label">Compare-at price (₹)</label><input className="input w-full" type="number" min="0" step="0.01" name="comparePrice" value={form.comparePrice} onChange={change}/></div>
+      <div><label className="label">Store price (₹) <span className="font-normal text-slate-400">— what customers pay</span></label><input className="input w-full" type="number" min="0" step="0.01" name="price" required value={form.price} onChange={change}/></div>
+      <div><label className="label">MRP / general price (₹) <span className="font-normal text-slate-400">— shown struck through</span></label><input className="input w-full" type="number" min="0" step="0.01" name="comparePrice" value={form.comparePrice} onChange={change}/></div>
+      <div><label className="label">Brand</label><input className="input w-full" name="brand" value={form.brand} onChange={change}/></div>
+      <div><label className="label">Unit / pack size</label><input className="input w-full" name="unit" placeholder="pcs, 1 kg, 500 ml" value={form.unit} onChange={change}/></div>
+      <div><label className="label">Your SKU / item code</label><input className="input w-full" name="sku" value={form.sku} onChange={change}/></div>
+      {owner && <div><label className="label">Cost price (₹) <span className="font-normal text-slate-400">— private, only you see it</span></label><input className="input w-full" type="number" min="0" step="0.01" name="costPrice" value={form.costPrice} onChange={change}/>{margin && <p className={cx("mt-1 text-xs font-semibold", margin.amount < 0 ? "text-red-600" : "text-emerald-700")}>{margin.amount < 0 ? "Selling below cost: " : "Profit per piece: "}{money(Math.abs(margin.amount))} ({margin.pct.toFixed(0)}%)</p>}</div>}
       <div><label className="label">Stock</label><input className="input w-full" type="number" min="0" name="stock" required value={form.stock} onChange={change}/></div>
       <div><label className="label">Category</label><select className="input w-full" name="category" value={form.category} onChange={change}>{meta.categories.map((c) => <option key={c}>{c}</option>)}</select></div>
       <div><label className="label">Sizes (comma separated)</label><input className="input w-full" name="sizes" value={form.sizes} onChange={change} placeholder="S, M, L"/></div>
       {!owner && <div><label className="label">Shop (owner of this product)</label><select className="input w-full" name="shop" value={form.shop} onChange={change}><option value="">Platform (no shop)</option>{shops.map((s) => <option key={s._id} value={s._id}>{s.name} · {s.location}</option>)}{product?.shop?._id && !shops.some((x) => x._id === product.shop._id) && <option value={product.shop._id}>{product.shop.name}</option>}</select></div>}
       <div className="sm:col-span-2"><label className="label">Product images (up to 5)</label>
         {existing.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{existing.map((img) => <div key={img} className="relative h-16 w-16 overflow-hidden rounded-lg bg-slate-100"><img src={sized(img, "sm")} className="h-full w-full object-cover" alt=""/><button type="button" title="Remove" onClick={() => setExisting(existing.filter((x) => x !== img))} className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"><X size={12}/></button></div>)}</div>}
-        <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{files.length ? `${files.length} new file(s) selected` : "Choose images (JPG, PNG, WEBP, AVIF · max 5 MB each)"}<input className="hidden" type="file" accept={IMAGE_TYPES.join(",")} multiple onChange={pickFiles}/></label></div>
+        {catalogImage && !files.length && <div className="mt-2 flex items-center gap-3 rounded-xl bg-emerald-50 p-2 text-sm text-emerald-900"><img src={sized(catalogImage, "sm")} alt="" className="h-14 w-14 rounded-lg object-cover"/><span className="flex-1">Using the catalogue photo. Upload your own below if you prefer.</span><button type="button" onClick={() => setCatalogImage("")} className="font-bold underline">Remove</button></div>}
+        <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{files.length ? `${files.length} new file(s) selected` : "Choose images (JPG, PNG, WEBP, AVIF · max 12 MB each)"}<input className="hidden" type="file" accept={IMAGE_TYPES.join(",")} multiple onChange={pickFiles}/></label></div>
       {!owner && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={change}/> Featured product</label>}
       <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isActive" checked={form.isActive} onChange={change}/> Active</label>
     </div>
-    <div className="mt-7 flex justify-end gap-3"><button type="button" onClick={close} className="btn-secondary">Cancel</button><button disabled={saving} className="btn-primary">{saving ? "Saving..." : product ? "Save changes" : "Create product"}</button></div></form></div>;
+    <div className="mt-7 flex justify-end gap-3"><button type="button" onClick={close} className="btn-secondary">Cancel</button><button disabled={saving} className="btn-primary">{saving ? "Saving..." : product ? "Save changes" : "Create product"}</button></div></form>{scanning && <ScanModal onCode={onScanned} onClose={() => setScanning(false)}/>}</div>;
 }
 
 /* ---------------------------------------------------------------- Orders */
