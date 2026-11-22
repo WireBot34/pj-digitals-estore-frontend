@@ -5,6 +5,7 @@ import { useMeta, statusLabel } from "../meta";
 import { useList } from "../useList";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
 import { ProductModal } from "./Admin";
+import { Stock } from "./StockManager";
 import { BlockedCard, WorkspaceFrame } from "./WorkspaceFrame";
 import { SupportPanel } from "./SupportPanel";
 import { PayoutFields, Stat } from "./admin/common";
@@ -15,7 +16,7 @@ const adTone = (s) => ({ approved: "green", pending: "amber", rejected: "red", d
 const day = (d) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const addressLine = (a = {}) => [a.fullName, a.street, a.landmark, a.location || a.city, a.state, a.zipCode].filter(Boolean).join(", ");
 
-const TABS = [["overview", "Overview"], ["products", "Products"], ["orders", "Orders"], ["ads", "Advertisements"], ["settlements", "Payouts"], ["profile", "Shop profile"], ["help", "Help"]];
+const TABS = [["overview", "Overview"], ["products", "Products"], ["stock", "Stock"], ["orders", "Orders"], ["ads", "Advertisements"], ["settlements", "Payouts"], ["profile", "Shop profile"], ["help", "Help"]];
 
 export function ShopOwnerWorkspace({ token, me, refreshMe, tell, exit }) {
   const shop = me?.shop;
@@ -34,6 +35,7 @@ export function ShopOwnerWorkspace({ token, me, refreshMe, tell, exit }) {
   return <WorkspaceFrame exit={exit} title={shop.name} subtitle={exit ? `${shop.location} · managing as admin` : shop.location} tabs={TABS} tab={tab} setTab={setTab} actions={actions} token={token}>
     {tab === "overview" && <Overview token={token} tell={tell} setTab={setTab}/>}
     {tab === "products" && <Products token={token} tell={tell}/>}
+    {tab === "stock" && <Stock token={token} tell={tell}/>}
     {tab === "orders" && <ShopOrders token={token} tell={tell}/>}
     {tab === "ads" && <Ads token={token} tell={tell}/>}
     {tab === "settlements" && <Payouts token={token} tell={tell}/>}
@@ -61,7 +63,7 @@ function Overview({ token, tell, setTab }) {
         {stats.dailySales.length ? <div className="mt-5 flex h-40 items-end gap-1">{stats.dailySales.map((d) => <div key={d.date} title={`${d.date}: ${money(d.sales)} (${d.orders} orders)`} className="flex-1 rounded-t bg-indigo-500" style={{ height: `${Math.max(4, (d.sales / max) * 100)}%` }}/>)}</div> : <p className="mt-4 text-sm text-slate-500">No sales in this period yet.</p>}</section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6"><h3 className="font-extrabold">Top products</h3>
         <div className="mt-4 space-y-3">{stats.topProducts.map((p) => <div key={p._id} className="flex justify-between gap-3 text-sm"><span className="truncate">{p.name}</span><span className="font-semibold">{p.unitsSold} sold · {money(p.revenue)}</span></div>)}{!stats.topProducts.length && <p className="text-sm text-slate-500">Nothing sold yet.</p>}</div></section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-2"><div className="flex items-center justify-between"><h3 className="font-extrabold">Low stock</h3><button onClick={() => setTab("products")} className="text-xs font-bold text-indigo-600">Manage stock</button></div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-2"><div className="flex items-center justify-between"><h3 className="font-extrabold">Low stock</h3><button onClick={() => setTab("stock")} className="text-xs font-bold text-indigo-600">Manage stock</button></div>
         <div className="mt-4 space-y-3">{stats.lowStockProducts.map((p) => <div key={p._id} className="flex items-center justify-between text-sm"><span className="truncate pr-3">{p.name}</span><Pill tone={p.stock === 0 ? "red" : "amber"}>{p.stock} left</Pill></div>)}{!stats.lowStockProducts.length && <p className="text-sm text-slate-500">All products are well stocked.</p>}</div></section>
     </div></>;
 }
@@ -108,13 +110,13 @@ function Products({ token, tell }) {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-4">Product</th><th className="px-5 py-4">Category</th><th className="px-5 py-4">Price</th><th className="px-5 py-4">Stock</th><th className="px-5 py-4">Status</th><th className="px-5 py-4 text-right">Actions</th></tr></thead>
         <tbody className="divide-y divide-slate-100">{data.map((p) => <tr key={p._id}>
-          <td className="px-5 py-4"><div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-lg bg-slate-100">{imageOf(p.images) && <img src={sized(imageOf(p.images), "sm")} className="h-full w-full object-cover" alt=""/>}</div><span className="font-bold">{p.name}</span></div></td>
+          <td className="px-5 py-4"><div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-lg bg-slate-100">{imageOf(p.images) && <img src={sized(imageOf(p.images), "sm")} className="h-full w-full object-cover" alt=""/>}</div><div className="min-w-0"><p className="font-bold">{p.name}</p>{p.barcode && <p className="text-xs text-slate-500">{p.barcode}</p>}</div></div></td>
           <td className="px-5 py-4 text-slate-600">{p.category}</td><td className="px-5 py-4 font-semibold">{money(p.price)}</td>
           <td className="px-5 py-4"><StockCell product={p} token={token} tell={tell} onChanged={reload}/></td>
           <td className="px-5 py-4"><Pill tone={p.isActive ? "green" : "gray"}>{p.isActive ? "Active" : "Hidden"}</Pill></td>
           <td className="px-5 py-4"><div className="flex justify-end gap-2"><button title="Edit" onClick={() => { setEditing(p); setModal(true); }} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Edit3 size={16}/></button><button title="Delete" onClick={() => remove(p)} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></div></div>}
     <Pager pagination={pagination} onPage={setPage}/>
-    {modal && <ProductModal owner product={editing} token={token} tell={tell} save={save} close={() => { setModal(false); setEditing(null); }}/>}
+    {modal && <ProductModal key={editing?._id || "new"} owner product={editing} onOpenExisting={(p) => setEditing(p)} token={token} tell={tell} save={save} close={() => { setModal(false); setEditing(null); }}/>}
   </>;
 }
 
