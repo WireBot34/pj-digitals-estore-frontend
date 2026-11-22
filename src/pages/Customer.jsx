@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { SignInButton, useClerk } from "@clerk/clerk-react";
 import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X } from "lucide-react";
-import { api, imageOf, money, qs } from "../api";
+import { api, imageOf, money, qs, sized } from "../api";
 import { BUSINESS } from "../config";
 import { useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
@@ -96,7 +96,7 @@ export function ProductCard({ p }) {
   return <Link to={`/product/${p._id}`} className="group block">
     <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-slate-200/60">
       {img
-        ? <img src={img} alt={p.name} loading="lazy" decoding="async" className={cx("h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]", out && "opacity-60")}/>
+        ? <img src={sized(img, "md")} alt={p.name} loading="lazy" decoding="async" className={cx("h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]", out && "opacity-60")}/>
         : <div className="grid h-full place-items-center text-slate-400"><Package size={32} strokeWidth={1.25}/></div>}
       {off > 0 && !out && <span className="absolute left-2 top-2 rounded bg-ink px-1.5 py-0.5 text-[11px] font-semibold text-white">{off}% off</span>}
       {out && <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">Sold out</span>}
@@ -231,7 +231,7 @@ export function Shop({ tell }) {
   return <Page>
     <AdStrip placement="catalogue" shop={shop}/>
     {shopInfo ? <header className="mb-6 flex flex-wrap items-start gap-4 sm:mb-8">
-      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">{shopInfo.logo ? <img src={shopInfo.logo} alt="" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-400"><Store size={26} strokeWidth={1.5}/></div>}</div>
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">{shopInfo.logo ? <img src={sized(shopInfo.logo, "sm")} alt="" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-400"><Store size={26} strokeWidth={1.5}/></div>}</div>
       <div className="min-w-0 flex-1">
         <h1 className="font-display text-2xl font-bold sm:text-3xl">{shopInfo.name}</h1>
         <p className="mt-1 text-sm text-slate-500">{shopInfo.location}{shopInfo.addressLine ? `, ${shopInfo.addressLine}` : ""}</p>
@@ -429,7 +429,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
             : <div className="grid h-full place-items-center text-slate-400"><Package size={48} strokeWidth={1.25}/></div>}
           {imgs.length > 1 && <span className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-xs font-medium text-white">{shot + 1} / {imgs.length}</span>}
         </div>
-        {imgs.length > 1 && <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">{imgs.map((src, i) => <button key={src} onClick={() => setShot(i)} aria-label={`Photo ${i + 1}`} className={cx("h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2", i === shot ? "border-ink" : "border-transparent opacity-70 hover:opacity-100")}><img src={src} alt="" className="h-full w-full object-cover"/></button>)}</div>}
+        {imgs.length > 1 && <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto">{imgs.map((src, i) => <button key={src} onClick={() => setShot(i)} aria-label={`Photo ${i + 1}`} className={cx("h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2", i === shot ? "border-ink" : "border-transparent opacity-70 hover:opacity-100")}><img src={sized(src, "sm")} alt="" className="h-full w-full object-cover"/></button>)}</div>}
       </div>
 
       <div>
@@ -508,7 +508,7 @@ function GuestCartView() {
       <FreeDeliveryBar subtotal={total}/>
       <ul className="divide-y divide-slate-200 border-y border-slate-200">
         {items.map((it) => <li key={`${it.id}-${it.size}`} className="flex gap-3 py-4 sm:gap-4">
-          <Link to={`/product/${it.id}`} className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-200/60 sm:h-24 sm:w-24">{it.image && <img src={it.image} className="h-full w-full object-cover" alt=""/>}</Link>
+          <Link to={`/product/${it.id}`} className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-200/60 sm:h-24 sm:w-24">{it.image && <img src={sized(it.image, "sm")} className="h-full w-full object-cover" alt=""/>}</Link>
           <div className="flex min-w-0 flex-1 flex-col">
             <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="line-clamp-2 text-sm font-medium sm:text-base">{it.name}</h3><p className="mt-0.5 text-xs text-slate-500">{it.size ? `Size ${it.size} · ` : ""}{money(it.price)} each</p></div><p className="price shrink-0 text-sm font-semibold sm:text-base">{money(it.price * it.quantity)}</p></div>
             <div className="mt-auto flex items-center justify-between pt-3">
@@ -564,7 +564,7 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
                     const stock = Number(p.stock);
                     const gone = p.isActive === false || stock === 0;
                     return <li key={`${p._id || i}-${it.size}`} className="flex gap-3 py-4 sm:gap-4">
-                      <Link to={p._id ? `/product/${p._id}` : "#"} className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-200/60 sm:h-24 sm:w-24">{imageOf(p.images) && <img src={imageOf(p.images)} className="h-full w-full object-cover" alt=""/>}</Link>
+                      <Link to={p._id ? `/product/${p._id}` : "#"} className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-200/60 sm:h-24 sm:w-24">{imageOf(p.images) && <img src={sized(imageOf(p.images), "sm")} className="h-full w-full object-cover" alt=""/>}</Link>
                       <div className="flex min-w-0 flex-1 flex-col">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0"><h3 className="line-clamp-2 text-sm font-medium sm:text-base">{p.name || "Product"}</h3><p className="mt-0.5 text-xs text-slate-500">{it.size ? `Size ${it.size} · ` : ""}{money(it.price)} each</p>
@@ -941,7 +941,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
         </div>
         <OrderTrack status={o.orderStatus}/>
         <ul className="mt-4 space-y-3 border-t border-slate-100 pt-4">{(o.items || []).map((it, i) => <li key={i} className="flex items-center gap-3 text-sm">
-          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-200/60">{(it.image || imageOf(it.product?.images)) && <img src={it.image || imageOf(it.product?.images)} loading="lazy" className="h-full w-full object-cover" alt=""/>}</div>
+          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-200/60">{(it.image || imageOf(it.product?.images)) && <img src={sized(it.image || imageOf(it.product?.images), "sm")} loading="lazy" className="h-full w-full object-cover" alt=""/>}</div>
           <span className="min-w-0 flex-1 text-slate-700">{it.name || it.product?.name}{it.size ? ` (${it.size})` : ""} <span className="text-slate-400">× {it.quantity}</span></span>
           <span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span>
         </li>)}</ul>
@@ -1088,7 +1088,7 @@ export function Shops({ tell }) {
       {loading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24"/>)}</div>
         : failed ? <ErrorState title="Could not load shops" onRetry={() => setRetry((n) => n + 1)}/>
           : shops.length ? <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">{shops.map((s) => <Link key={s._id} to={`/shop?shop=${s._id}`} className="flex gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-400">
-            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">{s.logo ? <img src={s.logo} alt="" loading="lazy" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-400"><Store size={24} strokeWidth={1.5}/></div>}</div>
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">{s.logo ? <img src={sized(s.logo, "sm")} alt="" loading="lazy" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-400"><Store size={24} strokeWidth={1.5}/></div>}</div>
             <div className="min-w-0"><div className="flex items-center gap-2"><h3 className="truncate font-semibold">{s.name}</h3><span className={cx("h-2 w-2 shrink-0 rounded-full", s.isOpen === false ? "bg-red-500" : "bg-emerald-500")} title={s.isOpen === false ? "Closed now" : "Open"}/></div><p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500"><MapPin size={12} className="shrink-0"/><span className="truncate">{s.location}{s.addressLine ? `, ${s.addressLine}` : ""}</span></p>{s.openingHours && <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500"><Clock size={12} className="shrink-0"/><span className="truncate">{s.openingHours}</span></p>}{s.description && <p className="mt-1.5 line-clamp-2 text-sm text-slate-600">{s.description}</p>}{s.isOpen === false && <p className="mt-1.5 text-xs font-semibold text-red-700">Closed now</p>}</div>
           </Link>)}</div> : <Empty title="No shops found" detail="Try another area or search."/>}
     </div>

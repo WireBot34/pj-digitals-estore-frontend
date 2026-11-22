@@ -35,6 +35,20 @@ export async function api(path, { token, method = "GET", body, headers = {} } = 
 
 export const money = (value) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(value || 0));
 export const imageOf = (images) => Array.isArray(images) ? (typeof images[0] === "string" ? images[0] : images[0]?.url || images[0]?.secure_url || "") : "";
+/**
+ * Smaller copy of a stored image for lists and thumbnails ("md" = 640px, "sm" = 240px).
+ * Own storage (/media/*.webp) has these sizes ready; old Cloudinary URLs get the same via a URL transform.
+ * Anything else is returned unchanged, so this is always safe to call.
+ */
+export const sized = (url, size = "md") => {
+  if (typeof url !== "string" || !url) return url || "";
+  const m = url.match(/^(.*\/media\/[a-z0-9-]+\/[a-z0-9-]+)\.webp(\?.*)?$/);
+  if (m && !/-(md|sm)$/.test(m[1])) return `${m[1]}-${size}.webp${m[2] || ""}`;
+  if (/^https:\/\/res\.cloudinary\.com\/.+\/upload\/(?!.*(?:w_|c_))/.test(url)) {
+    return url.replace("/upload/", `/upload/w_${size === "sm" ? 240 : 640},c_limit,f_auto,q_auto/`);
+  }
+  return url;
+};
 export const unwrap = (res, key = "data") => res?.[key] ?? res?.data ?? res;
 
 /** Builds "?a=1&b=2" from an object, skipping empty values. Returns "" when nothing is set. */

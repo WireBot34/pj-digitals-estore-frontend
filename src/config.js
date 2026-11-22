@@ -8,20 +8,20 @@
  * your local rules before you rely on them.
  */
 export const BUSINESS = {
-  name: "PJ Digitals",
+  name: "NBYME",
   /** Registered or trading name of the person or firm that runs the store, e.g. "PJ Digitals (proprietor: Name)" */
-  operator: "",
-  address: "",
-  phone: "",
-  whatsapp: "",
-  email: "",
-  domain: "nbyme.com",
+  operator: "NBYME",
+  address: "Muttom, Thodupuzha",
+  phone: "+916282227134",
+  whatsapp: "+916282227134",
+  email: "support@nbyme.com",
+  domain: "www.nbyme.com",
 
   /** Person who receives complaints (required for online marketplaces in India). */
-  grievanceOfficer: { name: "", phone: "", email: "", hours: "Mon to Sat, 10am to 6pm" },
+  grievanceOfficer: { name: "staff", phone: "+916282227134", email: "support@nbyme.com", hours: "Mon to Sat, 10am to 6pm" },
 
   /** Court area for disputes, e.g. "Thodupuzha, Kerala" */
-  jurisdiction: "",
+  jurisdiction: "Muttom, Kerala",
 
   /** Set to true only after you hold a GSTIN. While false, the site never says "tax invoice". */
   gstRegistered: false,
@@ -35,5 +35,5 @@ export const BUSINESS = {
   complaintAckHours: 48, // acknowledge a complaint within this time
   complaintResolveDays: 30, // resolve within this many days
 
-  lastUpdated: "19 November 2026",
+  lastUpdated: "21 November 2026",
 };
