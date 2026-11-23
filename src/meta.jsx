@@ -9,6 +9,11 @@ export const DEFAULT_META = {
   orderStatusLabels: { placed: "Placed", processing: "Processing", shipping: "Dispatched", delivered: "Delivered", cancelled: "Cancelled" },
   cashOnDelivery: true,
   onlinePayments: true,
+  gstRegistered: false,
+  cancelReasons: {
+    customer: [["changed_mind", "I changed my mind"], ["ordered_by_mistake", "Ordered by mistake"], ["found_cheaper", "Found a better price"], ["wrong_address", "Wrong address or phone"], ["too_slow", "Taking too long"], ["other", "Other"]].map(([value, label]) => ({ value, label })),
+    shop: [["out_of_stock", "Item is out of stock"], ["price_error", "Price or listing was wrong"], ["cannot_deliver", "Can't deliver to that address"], ["customer_unreachable", "Couldn't reach the customer"], ["shop_closed", "Shop is closed"], ["other", "Other"]].map(([value, label]) => ({ value, label })),
+  },
 };
 
 const MetaContext = createContext(DEFAULT_META);
@@ -23,4 +28,9 @@ export function MetaProvider({ children }) {
 }
 
 export const useMeta = () => useContext(MetaContext);
+/** Readable cancellation reason for an order ("" when none was given). */
+export const cancelLabel = (meta, o) => {
+  const list = meta.cancelReasons?.[o?.cancelledBy === "shop" ? "shop" : "customer"] || [];
+  return list.find((r) => r.value === o?.cancelReason)?.label || "";
+};
 export const statusLabel = (meta, status) => meta.orderStatusLabels?.[status] || status;

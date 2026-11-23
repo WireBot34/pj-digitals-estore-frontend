@@ -180,3 +180,39 @@ export function Logo({ className = "" }) {
     <span className="font-display text-lg font-bold tracking-tight text-slate-950 sm:text-xl">PJ Digitals</span>
   </span>;
 }
+
+/**
+ * Bottom-sheet that asks WHY before cancelling. reasons = [{ value, label }].
+ * required: a reason must be chosen (and a note if "other"). onConfirm({ reason, note }) may be async.
+ */
+export function ReasonSheet({ title = "Cancel this order?", message, reasons = [], required = false, confirmLabel = "Cancel order", keepLabel = "Keep order", onConfirm, onClose }) {
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !busy) onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+  const needNote = required && reason === "other";
+  const ok = (!required || reason) && (!needNote || note.trim().length > 0);
+  const go = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    try { await onConfirm({ reason: reason || undefined, note: note.trim() || undefined }); } finally { setBusy(false); }
+  };
+  return <div className="fixed inset-0 z-[120] grid place-items-end bg-black/45 sm:place-items-center sm:p-4" onClick={() => !busy && onClose()}>
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()} className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-xl" style={{ paddingBottom: "calc(1.25rem + var(--safe-bottom))" }}>
+      <h2 className="font-display text-lg font-bold">{title}</h2>
+      {message && <p className="mt-1 text-sm text-slate-600">{message}</p>}
+      <fieldset className="mt-4 space-y-2"><legend className="sr-only">Reason</legend>
+        {reasons.map((r) => <label key={r.value} className={cx("flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm", reason === r.value ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-slate-300")}>
+          <input type="radio" name="cancel-reason" checked={reason === r.value} onChange={() => setReason(r.value)}/>{r.label}</label>)}
+      </fieldset>
+      {(reason === "other" || (reason && !required)) && <div className="mt-3"><label className="label" htmlFor="cancel-note">{needNote ? "Tell us what happened" : "Add a note (optional)"}</label><input id="cancel-note" maxLength={200} className="input mt-1 w-full" value={note} onChange={(e) => setNote(e.target.value)}/></div>}
+      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" disabled={busy} onClick={onClose} className="btn-secondary">{keepLabel}</button>
+        <button type="button" disabled={!ok || busy} onClick={go} className="inline-flex items-center justify-center rounded-lg bg-red-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">{busy ? "Please wait..." : confirmLabel}</button>
+      </div>
+    </div></div>;
+}

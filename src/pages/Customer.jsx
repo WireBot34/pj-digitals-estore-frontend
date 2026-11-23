@@ -4,12 +4,12 @@ import { SignInButton, useClerk } from "@clerk/clerk-react";
 import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { BUSINESS } from "../config";
-import { useMeta, statusLabel } from "../meta";
+import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
 import { AdHero, AdStrip } from "../ads";
 import { guestCart, recentSearches, recentlyViewed } from "../lib/store";
 import { useInstall } from "../pwa";
-import { AuthPrompt, Empty, ErrorState, Page, PageTitle, Pager, Pill, ProductGridSkeleton, Skeleton, Stars, Steps, cx, orderTone, payTone, prettify, useConfirm, usePageTitle } from "../ui";
+import { AuthPrompt, Empty, ErrorState, Page, PageTitle, Pager, Pill, ProductGridSkeleton, ReasonSheet, Skeleton, Stars, Steps, cx, orderTone, payTone, prettify, useConfirm, usePageTitle } from "../ui";
 import { LEGAL } from "./Legal";
 
 const imagesOf = (images) => (Array.isArray(images) ? images.map((i) => (typeof i === "string" ? i : i?.url || i?.secure_url || "")).filter(Boolean) : []);
@@ -529,42 +529,12 @@ function GuestCartView() {
   </div>;
 }
 
-export function Cart({ token, signedIn, refreshCartCount, tell }) {
-  usePageTitle("Cart");
-  const meta = useMeta();
-  const [cart, setCart] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-  const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const r = await api("/api/cart", { token: await token() }); setCart(r.cart || r.data); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
-  useEffect(() => { load(); }, [load]);
-  const idOf = (item) => item.product?._id || item.product;
-  const update = async (item, quantity) => { try { await api(`/api/cart/item/${idOf(item)}`, { token: await token(), method: "PUT", body: { quantity, size: item.size } }); await load(); await refreshCartCount(); } catch (e) { tell(e.message, "error"); } };
-  const undo = async (item) => { try { await api("/api/cart/add", { token: await token(), method: "POST", body: { productId: idOf(item), quantity: item.quantity, size: item.size || undefined } }); await load(); await refreshCartCount(); } catch (e) { tell(e.message, "error"); } };
-  const remove = async (item) => {
-    try {
-      await api(`/api/cart/item/${idOf(item)}` + qs({ size: item.size }), { token: await token(), method: "DELETE" });
-      await load(); await refreshCartCount();
-      tell(`${item.product?.name || "Item"} removed.`, "success", { label: "Undo", onClick: () => undo(item) });
-    } catch (e) { tell(e.message, "error"); }
-  };
-
-  const items = cart?.items || [];
-  return <Page className="max-w-5xl">
-    <Steps current={0}/>
-    <PageTitle>Cart</PageTitle>
-    {!signedIn ? <GuestCartView/>
-      : loading ? <div className="space-y-4">{[0, 1].map((i) => <Skeleton key={i} className="h-24"/>)}</div>
-        : failed ? <ErrorState title="Could not load your cart" onRetry={() => { setLoading(true); load(); }}/>
-          : !items.length ? <Empty title="Your cart is empty" detail="Add something from the shop to get started." action={<Link to="/shop" className="btn-primary">Browse products</Link>}/>
-            : <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:gap-10">
-              <div>
-                <FreeDeliveryBar subtotal={Number(cart.totalAmount) || 0}/>
-                <ul className="divide-y divide-slate-200 border-y border-slate-200">
-                  {items.map((it, i) => {
-                    const p = it.product || {};
-                    const stock = Number(p.stock);
-                    const gone = p.isActive === false || stock === 0;
-                    return <li key={`${p._id || i}-${it.size}`} className="flex gap-3 py-4 sm:gap-4">
+/** One product row in the cart. */
+function CartLine({ it, update, remove }) {
+  const p = it.product || {};
+  const stock = Number(p.stock);
+  const gone = p.isActive === false || stock === 0;
+  return <li className="flex gap-3 py-4 sm:gap-4">
                       <Link to={p._id ? `/product/${p._id}` : "#"} className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-200/60 sm:h-24 sm:w-24">{imageOf(p.images) && <img src={sized(imageOf(p.images), "sm")} className="h-full w-full object-cover" alt=""/>}</Link>
                       <div className="flex min-w-0 flex-1 flex-col">
                         <div className="flex items-start justify-between gap-3">
@@ -578,16 +548,82 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
                         </div>
                       </div>
                     </li>;
-                  })}
-                </ul>
+}
+
+/** Splits cart items into one group per shop (same order as the server's quote), attaching that shop's price quote. */
+const groupCart = (items, quote) => {
+  const map = new Map();
+  for (const it of items) {
+    const shop = it.product?.shop && typeof it.product.shop === "object" ? it.product.shop : null;
+    const key = shop?._id || "platform";
+    if (!map.has(key)) map.set(key, { key, shop, items: [], quote: quote?.groups?.find((g) => (g.shop?._id || "platform") === key) || null });
+    map.get(key).items.push(it);
+  }
+  const list = [...map.values()];
+  list.sort((a, b) => (a.shop?.name ?? "\uffff").localeCompare(b.shop?.name ?? "\uffff"));
+  return list;
+};
+
+/** Delivery line for a group: exact fee, or "Free". */
+const feeText = (n) => (n === 0 ? "Free" : money(n));
+
+export function Cart({ token, signedIn, refreshCartCount, tell }) {
+  usePageTitle("Cart");
+  const meta = useMeta();
+  const [cart, setCart] = useState(null);
+  const [quote, setQuote] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const t = await token(); const [r, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/orders/quote", { token: t }).catch(() => null)]); setCart(r.cart || r.data); setQuote(q?.data || null); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
+  useEffect(() => { load(); }, [load]);
+  const idOf = (item) => item.product?._id || item.product;
+  const update = async (item, quantity) => { try { await api(`/api/cart/item/${idOf(item)}`, { token: await token(), method: "PUT", body: { quantity, size: item.size } }); await load(); await refreshCartCount(); } catch (e) { tell(e.message, "error"); } };
+  const undo = async (item) => { try { await api("/api/cart/add", { token: await token(), method: "POST", body: { productId: idOf(item), quantity: item.quantity, size: item.size || undefined } }); await load(); await refreshCartCount(); } catch (e) { tell(e.message, "error"); } };
+  const remove = async (item) => {
+    try {
+      await api(`/api/cart/item/${idOf(item)}` + qs({ size: item.size }), { token: await token(), method: "DELETE" });
+      await load(); await refreshCartCount();
+      tell(`${item.product?.name || "Item"} removed.`, "success", { label: "Undo", onClick: () => undo(item) });
+    } catch (e) { tell(e.message, "error"); }
+  };
+
+  const items = cart?.items || [];
+  const groups = groupCart(items, quote);
+  const blocked = quote && !quote.canCheckout && quote.issues?.length ? quote.issues[0] : null;
+  return <Page className="max-w-5xl">
+    <Steps current={0}/>
+    <PageTitle>Cart</PageTitle>
+    {!signedIn ? <GuestCartView/>
+      : loading ? <div className="space-y-4">{[0, 1].map((i) => <Skeleton key={i} className="h-24"/>)}</div>
+        : failed ? <ErrorState title="Could not load your cart" onRetry={() => { setLoading(true); load(); }}/>
+          : !items.length ? <Empty title="Your cart is empty" detail="Add something from the shop to get started." action={<Link to="/shop" className="btn-primary">Browse products</Link>}/>
+            : <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:gap-10">
+              <div>
+                {groups.map((g) => <section key={g.key} className="mb-6">
+                  <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
+                    <h3 className="font-semibold">{g.shop?.name || BUSINESS.name}{g.shop?.location && <span className="ml-2 text-xs font-normal text-slate-500">{g.shop.location}</span>}</h3>
+                    {g.shop && g.shop.isOpen === false && <span className="text-xs font-semibold text-red-700">Closed right now</span>}
+                  </div>
+                  <ul className="divide-y divide-slate-200 border-y border-slate-200">{g.items.map((it, i) => <CartLine key={`${it.product?._id || i}-${it.size}`} it={it} update={update} remove={remove}/>)}</ul>
+                  {g.quote && <div className="mt-2 text-sm">
+                    <p className="flex justify-between text-slate-600"><span>Delivery from {g.shop?.name || "this shop"}</span><span className="price font-medium">{feeText(g.quote.shippingCost)}</span></p>
+                    {g.quote.addForFreeDelivery != null && <p className="mt-1 text-xs font-medium text-brand-700">Add {money(g.quote.addForFreeDelivery)} more from this shop for free delivery</p>}
+                  </div>}
+                </section>)}
               </div>
               <aside className="h-fit rounded-xl border border-slate-200 bg-white p-5 lg:sticky lg:top-24">
                 <h2 className="font-semibold">Order summary</h2>
-                <dl className="mt-4 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(cart.totalAmount)}</dd></div><div className="flex justify-between"><dt className="text-slate-600">Delivery</dt><dd className="text-slate-500">Added when you order</dd></div></dl>
+                <dl className="mt-4 space-y-2 text-sm">
+                  <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
+                  <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.summary.orders > 1 ? ` (${quote.summary.orders} shops)` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added when you order</span>}</dd></div>
+                  {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
+                </dl>
                 <div className="my-4 border-t border-slate-200"/>
-                <div className="flex justify-between font-semibold"><span>Total so far</span><span className="price">{money(cart.totalAmount)}</span></div>
+                <div className="flex justify-between font-semibold"><span>{quote ? "Total" : "Total so far"}</span><span className="price">{money(quote ? quote.summary.totalAmount : cart.totalAmount)}</span></div>
+                {quote && quote.summary.orders > 1 && <p className="mt-2 text-xs text-slate-500">Each shop delivers its own order, so each has its own delivery fee.</p>}
                 {meta.cashOnDelivery && <p className="mt-3 text-xs text-slate-500">Pay on delivery is available.</p>}
-                <Link to="/checkout" className="btn-primary mt-5 w-full">Checkout <ArrowRight size={17}/></Link>
+                {blocked && <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-800"><b>{blocked.name}</b> {blocked.message}. Update your cart to continue.</p>}
+                {blocked ? <button disabled className="btn-primary mt-5 w-full">Checkout <ArrowRight size={17}/></button> : <Link to="/checkout" className="btn-primary mt-5 w-full">Checkout <ArrowRight size={17}/></Link>}
               </aside>
             </div>}
   </Page>;
@@ -654,14 +690,16 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
   const [payment, setPayment] = useState("cod");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [quote, setQuote] = useState(null); // exact per-shop prices from the server
 
   const load = useCallback(async () => {
     if (!signedIn) { setLoading(false); return; }
     setFailed(false);
     try {
       const t = await token();
-      const [c, a] = await Promise.all([api("/api/cart", { token: t }), api("/api/address", { token: t })]);
+      const [c, a, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/address", { token: t }), api("/api/orders/quote", { token: t }).catch(() => null)]);
       setCart(c.cart || c.data);
+      setQuote(q?.data || null);
       const list = Array.isArray(a.data) ? a.data : [];
       setAddresses(list);
       setAddressId((list.find((x) => x.isDefault) || list[0])?._id || "");
@@ -676,10 +714,11 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
   }, [user]);
 
   // only offer payment options the server says are enabled
+  const codOk = meta.cashOnDelivery && quote?.cod?.allowed !== false; // false when this order is over the cash limit
   useEffect(() => {
-    if (payment === "online" && !meta.onlinePayments && meta.cashOnDelivery) setPayment("cod");
-    if (payment === "cod" && !meta.cashOnDelivery && meta.onlinePayments) setPayment("online");
-  }, [meta.onlinePayments, meta.cashOnDelivery, payment]);
+    if (payment === "online" && !meta.onlinePayments && codOk) setPayment("cod");
+    if (payment === "cod" && !codOk && meta.onlinePayments) setPayment("online");
+  }, [meta.onlinePayments, codOk, payment]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -731,8 +770,10 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
   if (failed) return <Page narrow><ErrorState title="Could not load checkout" onRetry={() => { setLoading(true); load(); }}/></Page>;
   const items = cart?.items || [];
   if (!items.length) return <Page narrow><Empty title="Your cart is empty" detail="Add items before checking out." action={<Link to="/shop" className="btn-primary">Browse products</Link>}/></Page>;
-  const noPayment = !meta.onlinePayments && !meta.cashOnDelivery;
-  const unavailable = items.some((it) => it.product?.isActive === false || Number(it.product?.stock) === 0);
+  const noPayment = !meta.onlinePayments && !codOk;
+  const unavailable = quote ? !quote.canCheckout : items.some((it) => it.product?.isActive === false || Number(it.product?.stock) === 0);
+  const total = quote ? quote.summary.totalAmount : Number(cart.totalAmount);
+  const gst = !!(quote?.gstRegistered ?? meta.gstRegistered ?? BUSINESS.gstRegistered);
 
   return <Page className="max-w-5xl">
     <Steps current={1}/>
@@ -754,7 +795,8 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
         <section>
           <h2 className="font-semibold">2. Payment</h2>
           <div className="mt-3 space-y-2">
-            {meta.cashOnDelivery && <label className={choice(payment === "cod")}><input type="radio" name="pay" checked={payment === "cod"} onChange={() => setPayment("cod")} className="mt-1"/><div className="text-sm"><p className="font-semibold">Pay on delivery</p><p className="text-slate-600">Pay in cash to the delivery partner when your order arrives. Please keep the amount ready.</p></div></label>}
+            {codOk && <label className={choice(payment === "cod")}><input type="radio" name="pay" checked={payment === "cod"} onChange={() => setPayment("cod")} className="mt-1"/><div className="text-sm"><p className="font-semibold">Pay on delivery</p><p className="text-slate-600">Pay <b>{money(total)}</b> in cash to the delivery partner when your order arrives. Please keep the exact amount ready.</p></div></label>}
+            {meta.cashOnDelivery && !codOk && <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500"><p className="font-semibold text-slate-700">Pay on delivery isn't available for this order</p><p>{quote?.cod?.reason || "Cash on delivery is not available right now."}</p></div>}
             {meta.onlinePayments && <label className={choice(payment === "online")}><input type="radio" name="pay" checked={payment === "online"} onChange={() => setPayment("online")} className="mt-1"/><div className="text-sm"><p className="font-semibold">Pay online</p><p className="text-slate-600">UPI, cards, net banking and wallets, secured by Razorpay.</p></div></label>}
             {noPayment && <p className="text-sm font-semibold text-red-700">No payment method is available right now. Please try again later.</p>}
           </div>
@@ -764,11 +806,22 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
 
       <aside className="h-fit rounded-xl border border-slate-200 bg-white p-5 lg:sticky lg:top-24">
         <h2 className="font-semibold">Order summary</h2>
-        <ul className="mt-4 space-y-2.5">{items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.product?.name || "Product"} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>
+        {quote ? <div className="mt-4 space-y-4">{quote.groups.map((g) => <div key={g.shop?._id || "platform"}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.shop?.name || BUSINESS.name}</p>
+          <ul className="mt-1.5 space-y-1.5">{g.items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.name} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>
+          <p className="mt-1.5 flex justify-between text-xs text-slate-500"><span>Delivery</span><span>{feeText(g.shippingCost)}</span></p>
+        </div>)}</div>
+        : <ul className="mt-4 space-y-2.5">{items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.product?.name || "Product"} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>}
         <div className="my-4 border-t border-slate-200"/>
-        <dl className="space-y-2 text-sm"><div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(cart.totalAmount)}</dd></div><div className="flex justify-between"><dt className="text-slate-600">Delivery</dt><dd className="text-slate-500">Added on your order slip</dd></div><div className="flex justify-between"><dt className="text-slate-600">Pay by</dt><dd className="font-medium">{payment === "cod" ? "Cash on delivery" : "Online"}</dd></div></dl>
-        <p className="mt-3 text-xs leading-5 text-slate-500">Items from different shops are delivered as separate orders. {BUSINESS.gstRegistered ? "" : "No GST is added; prices are final."}</p>
-        {unavailable && <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-800">An item in your cart is no longer available. <Link to="/cart" className="underline">Update your cart</Link></p>}
+        <dl className="space-y-2 text-sm">
+          <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
+          <div className="flex justify-between"><dt className="text-slate-600">Delivery</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added on your order slip</span>}</dd></div>
+          {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
+          <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><dt>{payment === "cod" ? "Pay in cash" : "Total"}</dt><dd className="price">{money(total)}</dd></div>
+          <div className="flex justify-between"><dt className="text-slate-600">Pay by</dt><dd className="font-medium">{payment === "cod" ? "Cash on delivery" : "Online"}</dd></div>
+        </dl>
+        <p className="mt-3 text-xs leading-5 text-slate-500">Items from different shops are delivered as separate orders, each with its own delivery fee. {gst ? "" : "No GST is added; prices are final."}</p>
+        {unavailable && <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-800">{quote?.issues?.length ? <ul className="space-y-1">{quote.issues.map((x, i) => <li key={i}><b>{x.name}</b> {x.message}.</li>)}</ul> : "An item in your cart is no longer available."} <Link to="/cart" className="underline">Update your cart</Link></div>}
         <button disabled={busy || noPayment || unavailable} className="btn-primary mt-5 w-full">{busy ? "Please wait..." : payment === "online" ? "Place order and pay" : "Place order"}</button>
         <p className="mt-3 text-center text-xs text-slate-500">By placing your order you agree to our <Link to="/legal/terms" className="underline">terms</Link> and <Link to="/legal/refunds" className="underline">returns policy</Link>.</p>
       </aside>
@@ -779,9 +832,12 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
 /* ------------------------------------------------------------ Order slip */
 /** Printable slip. Kept off-screen and revealed only when printing. Never says "tax invoice" unless a GSTIN is set in config. */
 function Slip({ orders, method }) {
+  const meta = useMeta();
+  const gst = !!(meta.gstRegistered ?? BUSINESS.gstRegistered);
+  const gstin = meta.gstin || BUSINESS.gstin;
   const date = (d) => new Date(d || Date.now()).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
   return <div id="slip" className="slip-offscreen p-6 text-sm text-black">
-    <div className="flex items-start justify-between border-b border-black pb-3"><div><p className="text-lg font-bold">{BUSINESS.name}</p><p className="text-xs">{BUSINESS.domain}</p>{BUSINESS.gstRegistered && BUSINESS.gstin && <p className="text-xs">GSTIN: {BUSINESS.gstin}</p>}</div><p className="text-right text-xs font-bold uppercase">{BUSINESS.gstRegistered ? "Order slip" : "Order slip (not a tax invoice)"}</p></div>
+    <div className="flex items-start justify-between border-b border-black pb-3"><div><p className="text-lg font-bold">{BUSINESS.name}</p><p className="text-xs">{BUSINESS.domain}</p>{gst && gstin && <p className="text-xs">GSTIN: {gstin}</p>}</div><p className="text-right text-xs font-bold uppercase">{gst ? "Order slip" : "Order slip (not a tax invoice)"}</p></div>
     {orders.map((o) => {
       const a = o.shippingAddress || {};
       const sub = o.subtotal ?? (o.items || []).reduce((s, it) => s + it.price * it.quantity, 0);
@@ -895,11 +951,11 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
     return () => clearTimeout(t);
   }, [printing]);
 
-  const cancel = async (o) => {
-    const ok = await confirm({ title: "Cancel this order?", message: `${o.orderNumber || "This order"} will be cancelled. You can order again any time.`, confirmLabel: "Cancel order", cancelLabel: "Keep order", tone: "danger" });
-    if (!ok) return;
+  const [cancelling, setCancelling] = useState(null); // the order being cancelled (asks for a reason first)
+  const doCancel = async ({ reason, note }) => {
+    const o = cancelling;
     setBusyId(o._id);
-    try { await api(`/api/orders/${o._id}/cancel`, { token: await token(), method: "PUT" }); tell("Order cancelled."); await load(); } catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
+    try { await api(`/api/orders/${o._id}/cancel`, { token: await token(), method: "PUT", body: { reason, note } }); tell("Order cancelled."); setCancelling(null); await load(); } catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
   };
   const payNow = async (o) => {
     setBusyId(o._id);
@@ -941,6 +997,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
           <div className="flex flex-wrap gap-1.5"><Pill tone={payTone(o.paymentStatus)}>{o.paymentMethod === "cod" ? "COD · " : ""}{o.paymentStatus}</Pill><Pill tone={orderTone(o.orderStatus)}>{statusLabel(meta, o.orderStatus)}</Pill></div>
         </div>
         <OrderTrack status={o.orderStatus}/>
+        {o.orderStatus === "cancelled" && (o.cancelledBy || o.cancelReason) && <p className="mt-2 text-xs text-slate-600">Cancelled by {o.cancelledBy === "customer" ? "you" : o.cancelledBy === "shop" ? (shopName(o) || "the shop") : "our team"}{cancelLabel(meta, o) ? <>: <b>{cancelLabel(meta, o)}</b></> : ""}{o.cancelNote ? ` (${o.cancelNote})` : ""}.</p>}
         <ul className="mt-4 space-y-3 border-t border-slate-100 pt-4">{(o.items || []).map((it, i) => <li key={i} className="flex items-center gap-3 text-sm">
           <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-200/60">{(it.image || imageOf(it.product?.images)) && <img src={sized(it.image || imageOf(it.product?.images), "sm")} loading="lazy" className="h-full w-full object-cover" alt=""/>}</div>
           <span className="min-w-0 flex-1 text-slate-700">{it.name || it.product?.name}{it.size ? ` (${it.size})` : ""} <span className="text-slate-400">× {it.quantity}</span></span>
@@ -951,7 +1008,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
         {awaitingPayment && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Payment pending. Unpaid online orders are cancelled automatically after a short time.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           {awaitingPayment && <button disabled={busyId === o._id} onClick={() => payNow(o)} className="btn-primary px-4 py-2">Pay now</button>}
-          {canCancel && <button disabled={busyId === o._id} onClick={() => cancel(o)} className="btn-secondary px-4 py-2">Cancel order</button>}
+          {canCancel && <button disabled={busyId === o._id} onClick={() => setCancelling(o)} className="btn-secondary px-4 py-2">Cancel order</button>}
           {o.orderStatus !== "cancelled" && <button onClick={() => setTracking(tracking === o._id ? null : o._id)} className="btn-secondary px-4 py-2">{tracking === o._id ? "Hide details" : "Delivery details"}</button>}
           <button disabled={busyId === o._id} onClick={() => reorder(o)} className="btn-secondary px-4 py-2"><RotateCcw size={15}/> Order again</button>
           <button onClick={() => setPrinting(o)} className="btn-secondary px-4 py-2"><Printer size={15}/> Order slip</button>
@@ -960,6 +1017,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
       </article>;
     }) : <Empty title={orders.length ? "No orders here" : "No orders yet"} detail={orders.length ? "Try another tab." : "Your orders will appear here after checkout."} action={!orders.length && <Link to="/shop" className="btn-primary">Browse products</Link>}/>}</div>
     {printing && <Slip orders={[printing]} method={printing.paymentMethod}/>}
+    {cancelling && <ReasonSheet message={`${cancelling.orderNumber || "This order"} will be cancelled. You can order again any time.`} reasons={meta.cancelReasons?.customer || []} onConfirm={doCancel} onClose={() => setCancelling(null)}/>}
   </Page>;
 }
 

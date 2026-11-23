@@ -150,7 +150,8 @@ const SETTING_FIELDS = [
   ["driverFee", "Driver fee per delivery (₹)", "Paid to the driver for every completed delivery.", "number", { min: 0, step: 1 }],
   ["shippingCost", "Delivery charge (₹)", "Charged to customers per order.", "number", { min: 0, step: 1 }],
   ["freeShippingThreshold", "Free delivery above (₹)", "0 turns free delivery off.", "number", { min: 0, step: 1 }],
-  ["taxPct", "Tax / GST (%)", "Added to the order subtotal.", "number", { min: 0, max: 100, step: 0.1 }],
+  ["taxPct", "GST rate (%)", "Only charged when GST registration (below) is switched on.", "number", { min: 0, max: 100, step: 0.1 }],
+  ["codMaxAmount", "Cash on delivery limit (₹)", "Largest order total allowed with cash on delivery. 0 means no limit.", "number", { min: 0, step: 1 }],
   ["lowStockLevel", "Low-stock alert level", "Products at or below this are flagged.", "number", { min: 0, step: 1 }],
 ];
 
@@ -164,7 +165,7 @@ export function SettingsAdmin({ token, tell }) {
   const save = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
+      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), codMaxAmount: Number(s.codMaxAmount) || 0, gstRegistered: !!s.gstRegistered, gstin: (s.gstin || "").trim(), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
       await api("/api/admin/settings", { token: await token(), method: "PUT", body }); tell("Settings saved. Customers see changes within a minute."); await load();
     } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
   };
@@ -173,6 +174,10 @@ export function SettingsAdmin({ token, tell }) {
     <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6"><div className="grid gap-5 sm:grid-cols-2">
       {SETTING_FIELDS.map(([k, label, hint, type, attrs]) => <Field key={k} label={label} hint={hint}><input type={type} className="input w-full" value={s[k] ?? ""} onChange={set(k)} {...attrs}/></Field>)}
       <label className="flex items-center gap-3 self-end rounded-xl bg-slate-50 p-4 text-sm font-semibold"><input type="checkbox" checked={!!s.allowCod} onChange={set("allowCod")}/> Accept cash on delivery</label>
+      <div className="rounded-xl bg-slate-50 p-4 sm:col-span-2">
+        <label className="flex items-start gap-3 text-sm font-semibold"><input className="mt-1" type="checkbox" checked={!!s.gstRegistered} onChange={set("gstRegistered")}/><span>We are registered for GST<span className="block text-xs font-normal text-slate-500">Leave this OFF until you have a GSTIN. While it is off, no GST is added to any order, whatever the rate above says, and slips say "not a tax invoice".</span></span></label>
+        {s.gstRegistered && <div className="mt-3 max-w-sm"><label className="label" htmlFor="gstin">GSTIN</label><input id="gstin" className="input mt-1 w-full uppercase" maxLength={15} placeholder="32ABCDE1234F1Z5" value={s.gstin || ""} onChange={set("gstin")}/></div>}
+      </div>
       <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm font-semibold sm:col-span-2"><input className="mt-1" type="checkbox" checked={!!s.shopsCanAssignDrivers} onChange={set("shopsCanAssignDrivers")}/><span>Let shop owners assign delivery partners to their own orders<span className="block text-xs font-normal text-slate-500">When off, only admins dispatch. You can still allow or block individual shops from the Shops page.</span></span></label>
       <Field label="Storefront announcement" hint="Shown as a banner on every customer page. Leave empty to hide." className="sm:col-span-2"><input className="input w-full" value={s.announcement || ""} onChange={set("announcement")} placeholder="Festive offer: free delivery this weekend!"/></Field>
       <Field label="Support phone"><input className="input w-full" value={s.supportPhone || ""} onChange={set("supportPhone")}/></Field><Field label="Support email"><input className="input w-full" value={s.supportEmail || ""} onChange={set("supportEmail")}/></Field></div>

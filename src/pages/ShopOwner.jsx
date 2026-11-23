@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Download, Edit3, ImagePlus, Plus, Search, Trash2 } from "lucide-react";
 import { api, download, imageOf, money, sized } from "../api";
-import { useMeta, statusLabel } from "../meta";
+import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { useList } from "../useList";
-import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
+import { Empty, Loading, Pager, Pill, ReasonSheet, cx, orderTone, payTone, prettify } from "../ui";
 import { ProductModal } from "./Admin";
 import { Stock } from "./StockManager";
 import { BlockedCard, WorkspaceFrame } from "./WorkspaceFrame";
@@ -137,10 +137,11 @@ function ShopOrders({ token, tell }) {
     try { await api(`/api/shop/orders/${o._id}/unassign`, { token: await token(), method: "PUT" }); tell("Driver unassigned."); await reload(); } catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
   };
 
-  const setOrder = async (o, orderStatus) => {
-    if (orderStatus === "cancelled" && !confirm(`Cancel order ${o.orderNumber}? The customer will be notified.`)) return;
+  const [cancelling, setCancelling] = useState(null); // order waiting for a cancel reason
+  const setOrder = async (o, orderStatus, extra = {}) => {
+    if (orderStatus === "cancelled" && !extra.reason) { setCancelling(o); return; }
     setBusyId(o._id);
-    try { await api(`/api/shop/orders/${o._id}/status`, { token: await token(), method: "PUT", body: { orderStatus } }); tell(orderStatus === "processing" ? "Order accepted." : "Order cancelled."); await reload(); }
+    try { await api(`/api/shop/orders/${o._id}/status`, { token: await token(), method: "PUT", body: { orderStatus, ...extra } }); tell(orderStatus === "processing" ? "Order accepted." : "Order cancelled."); setCancelling(null); await reload(); }
     catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
   };
 
@@ -159,6 +160,7 @@ function ShopOrders({ token, tell }) {
             <div><p className="label">Delivery</p>{d ? <><p className="mt-1 font-semibold capitalize">{prettify(d.status)}</p><p className="text-slate-600">{d.driver ? `${d.driver.fullName}${d.driver.phone ? ` · ${d.driver.phone}` : ""}` : "Driver not assigned"}</p></> : <p className="mt-1 text-slate-500">{canAssign ? "No delivery partner yet." : "A delivery partner will be assigned soon."}</p>}
               {!canAssign && dispatchInfo && !d && ["placed", "processing"].includes(o.orderStatus) && <p className="mt-1 text-xs text-slate-400">{dispatchInfo}</p>}
               {canAssign && ["placed", "processing"].includes(o.orderStatus) && (!d || ["assigned", "accepted", "rejected", "failed", "cancelled"].includes(d.status)) && <div className="mt-2 flex flex-wrap gap-2"><button disabled={busyId === o._id} onClick={() => setAssigning(o)} className="btn-primary px-3 py-2 text-xs">{d && d.driver && !["rejected", "failed", "cancelled"].includes(d.status) ? "Change driver" : "Assign driver"}</button>{d && ["assigned", "accepted"].includes(d.status) && <button disabled={busyId === o._id} onClick={() => unassign(o)} className="btn-secondary px-3 py-2 text-xs text-red-600">Unassign</button>}</div>}</div></div>
+          {o.orderStatus === "cancelled" && (o.cancelledBy || o.cancelReason) && <p className="mt-3 text-xs text-slate-600">Cancelled by {o.cancelledBy === "customer" ? "the customer" : o.cancelledBy === "shop" ? "your shop" : "our team"}{cancelLabel(meta, o) ? <>: <b>{cancelLabel(meta, o)}</b></> : ""}{o.cancelNote ? ` (${o.cancelNote})` : ""}.</p>}
           {["placed", "processing"].includes(o.orderStatus) && <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
             {o.orderStatus === "placed" && <button disabled={busyId === o._id} onClick={() => setOrder(o, "processing")} className="btn-primary">Accept order</button>}
             {o.orderStatus === "processing" && <p className="self-center text-sm text-slate-500">Pack the order — the delivery partner will pick it up.</p>}
@@ -166,6 +168,7 @@ function ShopOrders({ token, tell }) {
         </article>;
       })}</div>}
     <Pager pagination={pagination} onPage={setPage}/>
+    {cancelling && <ReasonSheet required title="Why are you cancelling?" message={`The customer is told the reason. Order ${cancelling.orderNumber}.`} reasons={meta.cancelReasons?.shop || []} onConfirm={({ reason, note }) => setOrder(cancelling, "cancelled", { reason, note })} onClose={() => setCancelling(null)}/>}
     {assigning && <AssignDriverModal order={assigning} token={token} tell={tell} close={() => setAssigning(null)} done={() => { setAssigning(null); reload(); }}/>}
   </>;
 }
