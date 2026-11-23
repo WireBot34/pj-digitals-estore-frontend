@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Edit3, History, Minus, Plus, ScanLine, Search, SlidersHorizontal, X } from "lucide-react";
+import { Download, Edit3, Upload, History, Minus, Plus, ScanLine, Search, SlidersHorizontal, X } from "lucide-react";
 import { api, download, imageOf, money, sized } from "../api";
 import { useList } from "../useList";
 import { Empty, Loading, Pager, Pill, cx } from "../ui";
 import { ScanModal, canScan } from "../scanner";
 import { ProductModal } from "./Admin";
+import { Modal } from "./admin/common";
 
 const REASONS = {
   restock: "Received", sale: "Sold", cancel: "Back from cancelled order", adjust: "Adjusted",
@@ -174,6 +175,7 @@ function Inventory({ token, tell, tick, onChanged }) {
     try { await api(`/api/products/${id}`, { token: await token(), method: "PUT", body: fd }); tell("Product updated."); setEditing(null); await changed(); }
     catch (e) { tell(e.message, "error"); }
   };
+  const [importing, setImporting] = useState(false);
   const exportCsv = async () => { try { await download("/api/shop/inventory/export.csv", await token(), "my-stock.csv"); } catch (e) { tell(e.message, "error"); } };
 
   const chips = [["all", "All"], ["low", "Running low"], ["out", "Out of stock"], ["in", "Well stocked"]];
@@ -181,7 +183,8 @@ function Inventory({ token, tell, tick, onChanged }) {
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-extrabold">All products</h3>
       <div className="flex flex-wrap items-center gap-2"><div className="relative"><Search className="absolute left-3 top-3 text-slate-400" size={16}/><input className="input pl-9" placeholder="Search name, barcode, brand" value={search} onChange={(e) => setSearch(e.target.value)}/></div>
         <select className="input" aria-label="Sort" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}><option value="updated">Recently changed</option><option value="name">Name A–Z</option><option value="stock_asc">Stock: low to high</option><option value="stock_desc">Stock: high to low</option></select>
-        <button type="button" onClick={exportCsv} className="btn-secondary"><Download size={16}/> Export</button></div></div>
+        <button type="button" onClick={exportCsv} className="btn-secondary"><Download size={16}/> Export</button>
+        <button type="button" onClick={() => setImporting(true)} className="btn-secondary"><Upload size={16}/> Import CSV</button></div></div>
     <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto">{chips.map(([k, label]) => <button key={k} type="button" onClick={() => { setFilter(k); setPage(1); }} className={cx("shrink-0 rounded-full border px-4 py-2 text-sm font-semibold", filter === k ? "border-ink bg-ink text-white" : "border-slate-200 bg-white text-slate-600")}>{label}</button>)}</div>
     {loading ? <Loading/> : !data.length ? <Empty title="Nothing here" detail={q || filter !== "all" ? "No products match. Try another filter or search." : "Add products on the Products tab, or scan a barcode above to add your first one."}/> :
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm">
@@ -197,6 +200,7 @@ function Inventory({ token, tell, tick, onChanged }) {
             <button title="Stock history" onClick={() => setHistory(p)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><History size={16}/></button>
             <button title="Edit product" onClick={() => setEditing(p)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><Edit3 size={16}/></button></div></td></tr>)}</tbody></table></div></div>}
     <Pager pagination={pagination} onPage={setPage}/>
+    {importing && <ImportModal token={token} tell={tell} close={() => setImporting(false)} done={changed}/>}
     {editing && <ProductModal key={editing._id} owner product={editing} token={token} tell={tell} save={save} close={() => setEditing(null)}/>}
     {history && <HistoryModal product={history} token={token} tell={tell} close={() => setHistory(null)}/>}
     {adjusting && <AdjustModal product={adjusting} onSend={async (body) => { if (await quick(adjusting, body)) setAdjusting(null); }} close={() => setAdjusting(null)}/>}
@@ -247,4 +251,61 @@ function HistoryModal({ product, token, tell, close }) {
         <span className={cx("shrink-0 font-extrabold", m.delta > 0 ? "text-emerald-700" : "text-red-600")}>{m.delta > 0 ? "+" : ""}{m.delta}</span></li>)}</ul>}</div>
     <Pager pagination={pagination} onPage={setPage}/>
   </div></div>;
+}
+
+
+/* ---------------------------------------------------------------- CSV import */
+const ACTION = { create: ["New", "bg-emerald-100 text-emerald-700"], update: ["Update", "bg-indigo-100 text-indigo-700"], error: ["Problem", "bg-red-100 text-red-700"] };
+
+function ImportModal({ token, tell, close, done }) {
+  const [text, setText] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const pick = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    if (f.size > 900_000) return tell("That file is too big (max about 900 KB, roughly 2,000 products). Split it into smaller files.", "error");
+    const t = await f.text();
+    setText(t); setFileName(f.name); setResult(null); setPreview(null);
+    run(t, true);
+  };
+  const run = async (csv, dryRun) => {
+    setBusy(true);
+    try {
+      const r = await api("/api/shop/inventory/import", { token: await token(), method: "POST", body: { csv, dryRun } });
+      if (dryRun) setPreview(r); else { setResult(r); setPreview(null); await done(); }
+    } catch (e) { tell(e.message, "error"); setPreview(null); } finally { setBusy(false); }
+  };
+  const s = preview?.summary;
+  const nothing = s && s.create + s.update === 0;
+  return <Modal title="Import products from CSV" subtitle="Update prices and stock for many products at once, or add new ones. Matches by barcode, then SKU, then exact name." close={close} wide>
+    {result ? <div>
+      <p className="rounded-xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{result.message}</p>
+      {result.failures?.length > 0 && <ul className="mt-3 space-y-1 text-sm text-red-700">{result.failures.map((f) => <li key={f.line}>Row {f.line}{f.name ? ` (${f.name})` : ""}: {f.error}</li>)}</ul>}
+      <button onClick={close} className="btn-primary mt-5 w-full">Done</button>
+    </div> : <>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="btn-primary cursor-pointer"><Upload size={16}/> Choose CSV file<input type="file" accept=".csv,text/csv,text/plain" className="sr-only" onChange={pick}/></label>
+        <button type="button" className="btn-secondary" onClick={async () => { try { await download("/api/shop/inventory/template.csv", await token(), "stock-template.csv"); } catch (e) { tell(e.message, "error"); } }}><Download size={16}/> Template</button>
+        {fileName && <span className="truncate text-xs text-slate-500">{fileName}</span>}
+      </div>
+      <p className="mt-3 text-xs text-slate-500">Tip: press <b>Export</b>, edit the file in Excel or Google Sheets, then import it back. Columns left empty are not changed. <b>Stock is set to the number in the file.</b> New products start hidden until you add a photo.</p>
+      {busy && !preview && <Loading/>}
+      {preview && <div className="mt-5">
+        <div className="flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">{s.create} new</span><span className="rounded-full bg-indigo-100 px-3 py-1 text-indigo-700">{s.update} to update</span><span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{s.unchanged} unchanged</span>{s.error > 0 && <span className="rounded-full bg-red-100 px-3 py-1 text-red-700">{s.error} with problems (skipped)</span>}</div>
+        {preview.ignoredColumns?.length > 0 && <p className="mt-2 text-xs text-slate-400">Ignored columns: {preview.ignoredColumns.join(", ")}</p>}
+        <div className="mt-3 max-h-72 overflow-y-auto rounded-xl border border-slate-200"><table className="w-full text-left text-xs"><tbody className="divide-y divide-slate-100">
+          {preview.rows.map((r) => <tr key={r.line}><td className="w-14 px-3 py-2 text-slate-400">Row {r.line}</td><td className="w-20 px-3 py-2"><span className={cx("rounded-full px-2 py-0.5 font-bold", ACTION[r.action][1])}>{ACTION[r.action][0]}</span></td>
+            <td className="px-3 py-2"><p className="font-semibold">{r.name}</p>{r.error && <p className="text-red-600">{r.error}</p>}{r.warning && <p className="text-amber-600">{r.warning}</p>}
+              {r.changes && <p className="text-slate-500">{r.changes.map((c) => `${c.field}: ${c.from === "" ? "–" : c.from} → ${c.to}`).join(" · ")}</p>}
+              {r.action === "create" && <p className="text-slate-500">₹{r.set.price} · stock {r.set.stock} · {r.set.category}</p>}</td></tr>)}
+        </tbody></table></div>
+        {preview.rows.length >= 300 && <p className="mt-1 text-xs text-slate-400">Showing the first 300 changes.</p>}
+        <button disabled={busy || nothing} onClick={() => run(text, false)} className="btn-primary mt-4 w-full">{busy ? "Importing…" : nothing ? "Nothing to import" : `Apply ${s.create + s.update} change${s.create + s.update === 1 ? "" : "s"}`}</button>
+      </div>}
+    </>}
+  </Modal>;
 }

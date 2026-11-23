@@ -3,6 +3,7 @@ import { Download, Edit3, ImagePlus, Plus, Search, Trash2 } from "lucide-react";
 import { api, download, imageOf, money, sized } from "../api";
 import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { useList } from "../useList";
+import { Bars, Delta, SalesChart } from "../charts";
 import { Empty, Loading, Pager, Pill, ReasonSheet, cx, orderTone, payTone, prettify } from "../ui";
 import { ProductModal } from "./Admin";
 import { Stock } from "./StockManager";
@@ -51,18 +52,24 @@ function Overview({ token, tell, setTab }) {
   const [stats, setStats] = useState(null);
   useEffect(() => { setStats(null); (async () => { try { setStats((await api(`/api/shop/stats?days=${days}`, { token: await token() })).data); } catch (e) { tell(e.message, "error"); } })(); }, [days, token, tell]);
   if (!stats) return <Loading/>;
-  const max = Math.max(1, ...stats.dailySales.map((d) => d.sales));
-  const cards = [["Orders", stats.orders], ["Sales", money(stats.sales)], ["Paid sales", money(stats.paidSales)], ["Products", stats.productCount]];
+  const prev = stats.previous || { orders: 0, sales: 0 };
+  const cards = [["Orders", stats.orders, <Delta now={stats.orders} before={prev.orders} days={days}/>], ["Sales", money(stats.sales), <Delta now={stats.sales} before={prev.sales} days={days}/>], ["Paid sales", money(stats.paidSales)], ["Products", stats.productCount]];
   return <>
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-extrabold">Your shop at a glance</h2>
       <select className="input" value={days} onChange={(e) => setDays(Number(e.target.value))}>{[7, 30, 90].map((d) => <option key={d} value={d}>Last {d} days</option>)}</select></div>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([t, v]) => <div key={t} className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm font-semibold text-slate-500">{t}</p><p className="mt-2 text-2xl font-extrabold">{v}</p></div>)}</div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([t, v, extra]) => <div key={t} className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-sm font-semibold text-slate-500">{t}</p><p className="mt-2 text-2xl font-extrabold">{v}</p><div className="mt-1 min-h-[1rem]">{extra}</div></div>)}</div>
     <div className="mt-6 flex flex-wrap gap-2">{Object.entries(stats.ordersByStatus).map(([s, n]) => <Pill key={s} tone={orderTone(s)}>{statusLabel(meta, s)}: {n}</Pill>)}</div>
     <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <section className="rounded-2xl border border-slate-200 bg-white p-6"><h3 className="font-extrabold">Daily sales</h3>
-        {stats.dailySales.length ? <div className="mt-5 flex h-40 items-end gap-1">{stats.dailySales.map((d) => <div key={d.date} title={`${d.date}: ${money(d.sales)} (${d.orders} orders)`} className="flex-1 rounded-t bg-indigo-500" style={{ height: `${Math.max(4, (d.sales / max) * 100)}%` }}/>)}</div> : <p className="mt-4 text-sm text-slate-500">No sales in this period yet.</p>}</section>
+        {stats.orders ? <div className="mt-4"><SalesChart data={stats.dailySales}/></div> : <p className="mt-4 text-sm text-slate-500">No sales in this period yet.</p>}</section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6"><h3 className="font-extrabold">Top products</h3>
         <div className="mt-4 space-y-3">{stats.topProducts.map((p) => <div key={p._id} className="flex justify-between gap-3 text-sm"><span className="truncate">{p.name}</span><span className="font-semibold">{p.unitsSold} sold · {money(p.revenue)}</span></div>)}{!stats.topProducts.length && <p className="text-sm text-slate-500">Nothing sold yet.</p>}</div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6"><h3 className="font-extrabold">Sales by category</h3>
+        <div className="mt-4">{stats.salesByCategory?.length ? <Bars rows={stats.salesByCategory.map((c) => ({ label: c.category, value: c.revenue, note: `${money(c.revenue)} · ${c.units} sold` }))}/> : <p className="text-sm text-slate-500">Nothing sold yet.</p>}</div></section>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6"><h3 className="font-extrabold">Estimated profit</h3>
+        {stats.profit?.coverage ? <><p className="mt-3 text-3xl font-extrabold">{money(stats.profit.estimated)}</p>
+          <p className="mt-2 text-xs text-slate-500">Selling price minus your cost price, for products that have a cost price saved ({stats.profit.coverage}% of your sales). Uses today's cost price, so it's an estimate.</p></> :
+          <p className="mt-3 text-sm text-slate-500">Add a cost price to your products (Stock tab) and your profit will show here. Only you can see cost prices.</p>}</section>
       <section className="rounded-2xl border border-slate-200 bg-white p-6 lg:col-span-2"><div className="flex items-center justify-between"><h3 className="font-extrabold">Low stock</h3><button onClick={() => setTab("stock")} className="text-xs font-bold text-indigo-600">Manage stock</button></div>
         <div className="mt-4 space-y-3">{stats.lowStockProducts.map((p) => <div key={p._id} className="flex items-center justify-between text-sm"><span className="truncate pr-3">{p.name}</span><Pill tone={p.stock === 0 ? "red" : "amber"}>{p.stock} left</Pill></div>)}{!stats.lowStockProducts.length && <p className="text-sm text-slate-500">All products are well stocked.</p>}</div></section>
     </div></>;
@@ -147,7 +154,8 @@ function ShopOrders({ token, tell }) {
 
   return <>
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl font-extrabold">Orders</h2><p className="mt-1 text-sm text-slate-500">Accept new orders and follow their delivery. Online orders appear once they're paid.</p></div>
-      <select className="input" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">All statuses</option>{meta.orderStatuses.map((s) => <option key={s} value={s}>{statusLabel(meta, s)}</option>)}</select></div>
+      <div className="flex flex-wrap items-center gap-2"><select className="input" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="">All statuses</option>{meta.orderStatuses.map((s) => <option key={s} value={s}>{statusLabel(meta, s)}</option>)}</select>
+        <button type="button" className="btn-secondary" onClick={async () => { try { await download("/api/shop/orders/export.csv", await token(), "my-orders.csv"); } catch (e) { tell(e.message, "error"); } }}><Download size={16}/> Export last 30 days</button></div></div>
     {loading ? <Loading/> : !data.length ? <Empty title="No orders" detail="New orders will show up here."/> :
       <div className="space-y-4">{data.map((o) => {
         const d = o.delivery;
