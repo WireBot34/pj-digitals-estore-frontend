@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { SignInButton, useClerk } from "@clerk/clerk-react";
-import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { BUSINESS } from "../config";
 import { cancelLabel, useMeta, statusLabel } from "../meta";
@@ -288,35 +288,129 @@ function StarPicker({ value, onChange }) {
   </div>;
 }
 
-function Reviews({ productId, token, signedIn, tell, onChanged }) {
-  const [data, setData] = useState({ reviews: [], pagination: null });
+const REVIEW_PHOTOS = 3;
+const REVIEW_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+const REVIEW_PHOTO_MAX = 12 * 1024 * 1024;
+const REVIEW_SORTS = [["recent", "Newest"], ["helpful", "Most helpful"], ["high", "Highest rating"], ["low", "Lowest rating"]];
+
+function ReviewSummary({ average, count, breakdown }) {
+  if (!count) return null;
+  return <div className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-slate-200 bg-white p-4">
+    <div><p className="font-display text-4xl font-bold leading-none">{Number(average || 0).toFixed(1)}</p><div className="mt-2"><Stars value={average}/></div><p className="mt-1 text-xs text-slate-500">{count} review{count === 1 ? "" : "s"}</p></div>
+    <ul className="min-w-[200px] flex-1 space-y-1">{[5, 4, 3, 2, 1].map((n) => { const c = breakdown?.[n] || 0; return <li key={n} className="flex items-center gap-2 text-xs text-slate-600"><span className="w-3 text-right">{n}</span><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-brand-600" style={{ width: `${(c / count) * 100}%` }}/></div><span className="w-6 text-right text-slate-400">{c}</span></li>; })}</ul>
+  </div>;
+}
+
+function Reviews({ productId, token, signedIn, tell, onChanged, ratings }) {
+  const confirm = useConfirm();
+  const [list, setList] = useState([]);
+  const [pagination, setPagination] = useState(null);
+  const [breakdown, setBreakdown] = useState(null);
+  const [sort, setSort] = useState("recent");
+  const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
+  const [kept, setKept] = useState([]); // photos of my existing review that stay
+  const [files, setFiles] = useState([]); // new photos: [{ file, url }]
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => api(`/api/products/${productId}/reviews?limit=20`).then((r) => setData({ reviews: r.data || [], pagination: r.pagination })).catch(() => {}), [productId]);
-  useEffect(() => { load(); }, [load]);
+  const [viewer, setViewer] = useState(null); // { images, index }
+  const filled = useRef(false);
+
+  // signed-in requests carry the token so each review can say "you found this helpful"
+  const fetchPage = useCallback(async (page, sortKey) => {
+    const t = signedIn ? await token() : undefined;
+    return api(`/api/products/${productId}/reviews?limit=10&page=${page}&sort=${sortKey}`, t ? { token: t } : undefined);
+  }, [productId, signedIn, token]);
+  const load = useCallback(async () => {
+    try { const r = await fetchPage(1, sort); setList(r.data || []); setPagination(r.pagination); setBreakdown(r.breakdown); } catch { /* the section just stays empty */ } finally { setLoading(false); }
+  }, [fetchPage, sort]);
+  useEffect(() => { setLoading(true); load(); }, [load]);
+  const more = async () => {
+    try { const r = await fetchPage((pagination?.page || 1) + 1, sort); setList((l) => [...l, ...(r.data || [])]); setPagination(r.pagination); } catch (e) { tell(e.message, "error"); }
+  };
+
+  // my own review fills the form once, so posting again edits it (and keeps its photos)
+  const mine = list.find((r) => r.isMine);
+  useEffect(() => {
+    if (mine && !filled.current) { filled.current = true; setRating(mine.rating); setComment(mine.comment || ""); setKept(mine.images || []); }
+  }, [mine]);
+  useEffect(() => () => files.forEach((f) => URL.revokeObjectURL(f.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (e) => {
+    const chosen = [...e.target.files];
+    e.target.value = "";
+    const room = REVIEW_PHOTOS - kept.length - files.length;
+    const ok = [];
+    for (const f of chosen) {
+      if (!REVIEW_PHOTO_TYPES.includes(f.type)) { tell(`${f.name} must be a JPG, PNG, WEBP or AVIF photo.`, "error"); continue; }
+      if (f.size > REVIEW_PHOTO_MAX) { tell(`${f.name} is larger than 12 MB.`, "error"); continue; }
+      ok.push({ file: f, url: URL.createObjectURL(f) });
+    }
+    if (ok.length > room) tell(`You can add up to ${REVIEW_PHOTOS} photos.`, "error");
+    setFiles((cur) => [...cur, ...ok.slice(0, Math.max(0, room))]);
+  };
+  const dropNew = (i) => setFiles((cur) => { URL.revokeObjectURL(cur[i].url); return cur.filter((_, k) => k !== i); });
+
   const submit = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      await api(`/api/products/${productId}/reviews`, { token: await token(), method: "POST", body: { rating, comment } });
-      tell("Thanks for your review."); setComment(""); await load(); onChanged?.();
+      const fd = new FormData();
+      fd.append("rating", String(rating));
+      fd.append("comment", comment);
+      fd.append("keepImages", JSON.stringify(kept));
+      files.forEach((f) => fd.append("images", f.file));
+      await api(`/api/products/${productId}/reviews`, { token: await token(), method: "POST", body: fd });
+      tell(mine ? "Review updated." : "Thanks for your review.");
+      files.forEach((f) => URL.revokeObjectURL(f.url));
+      setFiles([]); filled.current = false;
+      await load(); onChanged?.();
     } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
   };
+
+  const vote = async (r) => {
+    if (!signedIn) { tell("Sign in to mark a review as helpful.", "error"); return; }
+    const flip = (v, n) => setList((l) => l.map((x) => (x._id === r._id ? { ...x, iVoted: v, helpfulCount: n } : x)));
+    flip(!r.iVoted, Math.max(0, (r.helpfulCount || 0) + (r.iVoted ? -1 : 1))); // instant, then the server's answer wins
+    try { const res = await api(`/api/products/${productId}/reviews/${r._id}/helpful`, { token: await token(), method: "POST" }); flip(res.data.iVoted, res.data.helpfulCount); }
+    catch (err) { flip(r.iVoted, r.helpfulCount || 0); tell(err.message, "error"); }
+  };
+  const remove = async (r) => {
+    if (!(await confirm({ title: "Delete your review?", message: "This removes your rating and photos.", confirmLabel: "Delete", cancelLabel: "Keep it", tone: "danger" }))) return;
+    try { await api(`/api/products/${productId}/reviews/${r._id}`, { token: await token(), method: "DELETE" }); tell("Review deleted."); filled.current = false; setRating(5); setComment(""); setKept([]); await load(); onChanged?.(); }
+    catch (err) { tell(err.message, "error"); }
+  };
+
+  const slots = REVIEW_PHOTOS - kept.length - files.length;
   return <section className="mt-12 border-t border-slate-200 pt-8">
     <h2 className="font-display text-xl font-bold">Reviews</h2>
+    <ReviewSummary average={ratings?.average} count={ratings?.count ?? pagination?.total ?? 0} breakdown={breakdown}/>
     {signedIn && <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-      <span className="label">Your rating</span>
+      <span className="label">{mine ? "Your review" : "Your rating"}</span>
       <div className="mt-1"><StarPicker value={rating} onChange={setRating}/></div>
       <textarea aria-label="Your review" className="input mt-3 w-full" rows="3" maxLength={1000} placeholder="Share your experience (optional)" value={comment} onChange={(e) => setComment(e.target.value)}/>
-      <button disabled={busy} className="btn-primary mt-3 w-full sm:w-auto">{busy ? "Saving..." : "Submit review"}</button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {kept.map((u) => <div key={u} className="relative h-16 w-16 overflow-hidden rounded-lg bg-slate-200"><img src={sized(u, "sm")} alt="" className="h-full w-full object-cover"/><button type="button" aria-label="Remove photo" onClick={() => setKept((k) => k.filter((x) => x !== u))} className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"><X size={12}/></button></div>)}
+        {files.map((f, i) => <div key={f.url} className="relative h-16 w-16 overflow-hidden rounded-lg bg-slate-200"><img src={f.url} alt="" className="h-full w-full object-cover"/><button type="button" aria-label="Remove photo" onClick={() => dropNew(i)} className="absolute right-0.5 top-0.5 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"><X size={12}/></button></div>)}
+        {slots > 0 && <label className="grid h-16 w-16 cursor-pointer place-items-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-slate-500"><Camera size={20}/><span className="sr-only">Add photos</span><input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple className="sr-only" onChange={pick}/></label>}
+        <span className="text-xs text-slate-500">{slots > 0 ? `Add up to ${REVIEW_PHOTOS} photos` : "Photo limit reached"}</span>
+      </div>
+      <button disabled={busy} className="btn-primary mt-3 w-full sm:w-auto">{busy ? "Saving..." : mine ? "Update review" : "Submit review"}</button>
       <p className="mt-2 text-xs text-slate-500">You can review a product after your order has been delivered.</p>
     </form>}
-    <div className="mt-5 divide-y divide-slate-200">
-      {data.reviews.length ? data.reviews.map((r) => <div key={r._id} className="py-4">
-        <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><Stars value={r.rating}/><span className="text-sm font-semibold">{r.user?.name || "Customer"}</span></div><span className="text-xs text-slate-500">{new Date(r.createdAt).toLocaleDateString()}</span></div>
-        {r.comment && <p className="mt-2 text-sm text-slate-700">{r.comment}</p>}
+    {list.length > 1 && <div className="mt-5 flex items-center justify-end gap-2 text-sm"><label htmlFor="rev-sort" className="text-slate-500">Sort by</label><select id="rev-sort" className="input w-auto py-1.5" value={sort} onChange={(e) => setSort(e.target.value)}>{REVIEW_SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>}
+    <div className="mt-3 divide-y divide-slate-200">
+      {loading ? <p className="py-2 text-sm text-slate-500">Loading reviews...</p> : list.length ? list.map((r) => <div key={r._id} className="py-4">
+        <div className="flex items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-x-2 gap-y-1"><Stars value={r.rating}/><span className="text-sm font-semibold">{r.isMine ? "You" : r.user?.name || "Customer"}</span>{r.verifiedPurchase && <span className="text-xs font-medium text-brand-700">Verified purchase</span>}</div><span className="shrink-0 text-xs text-slate-500">{new Date(r.createdAt).toLocaleDateString()}</span></div>
+        {r.comment && <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{r.comment}</p>}
+        {r.images?.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{r.images.map((u, i) => <button key={u} type="button" onClick={() => setViewer({ images: r.images, index: i })} className="h-20 w-20 overflow-hidden rounded-lg bg-slate-200" aria-label={`Open photo ${i + 1} of ${r.images.length}`}><img src={sized(u, "sm")} alt="" loading="lazy" className="h-full w-full object-cover"/></button>)}</div>}
+        <div className="mt-3 flex items-center gap-4 text-xs">
+          {!r.isMine ? <button type="button" onClick={() => vote(r)} aria-pressed={!!r.iVoted} className={cx("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-semibold", r.iVoted ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-300 text-slate-600 hover:border-slate-500")}><ThumbsUp size={14}/> Helpful{r.helpfulCount > 0 ? ` (${r.helpfulCount})` : ""}</button>
+            : <>{r.helpfulCount > 0 && <span className="text-slate-500">{r.helpfulCount} found this helpful</span>}<button type="button" onClick={() => remove(r)} className="font-semibold text-slate-500 hover:text-red-700">Delete</button></>}
+        </div>
       </div>) : <p className="py-2 text-sm text-slate-500">No reviews yet.</p>}
     </div>
+    {pagination && pagination.page < pagination.pages && <div className="mt-3 text-center"><button type="button" onClick={more} className="btn-secondary">Show more reviews</button></div>}
+    {viewer && <Lightbox images={viewer.images} index={viewer.index} setIndex={(i) => setViewer((v) => ({ ...v, index: i }))} close={() => setViewer(null)} alt="Review photo"/>}
   </section>;
 }
 
@@ -476,7 +570,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
 
     {more.shop.length > 0 && <section className="mt-12"><h2 className="mb-5 font-display text-xl font-bold">More from {p.shop?.name}</h2><ProductGrid products={more.shop}/></section>}
     {more.similar.length > 0 && <section className="mt-12"><h2 className="mb-5 font-display text-xl font-bold">You may also like</h2><ProductGrid products={more.similar}/></section>}
-    <Reviews productId={p._id} token={token} signedIn={signedIn} tell={tell} onChanged={loadProduct}/>
+    <Reviews productId={p._id} token={token} signedIn={signedIn} tell={tell} onChanged={loadProduct} ratings={p.ratings}/>
     <RecentlyViewed exclude={p._id} className="mt-12 border-t border-slate-200 pt-8"/>
     {zoom && imgs.length > 0 && <Lightbox images={imgs} index={shot} setIndex={setShot} close={() => setZoom(false)} alt={p.name}/>}
   </Page>;

@@ -22,7 +22,10 @@ const MetaContext = createContext(DEFAULT_META);
 export function MetaProvider({ children }) {
   const [meta, setMeta] = useState(DEFAULT_META);
   useEffect(() => {
-    api("/api/meta").then((r) => r.data && setMeta({ ...DEFAULT_META, ...r.data, loaded: true })).catch(() => {});
+    const load = () => api("/api/meta").then((r) => r.data && setMeta({ ...DEFAULT_META, ...r.data, loaded: true })).catch(() => {});
+    load();
+    window.addEventListener("meta:reload", load); // the admin changed categories or settings
+    return () => window.removeEventListener("meta:reload", load);
   }, []);
   return <MetaContext.Provider value={meta}>{children}</MetaContext.Provider>;
 }

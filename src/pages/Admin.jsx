@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { UserButton } from "@clerk/clerk-react";
-import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Trash2, Truck, UserCog, Users, X } from "lucide-react";
+import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Tags, Trash2, Truck, UserCog, Users, X } from "lucide-react";
 import { api, imageOf, money, qs, setActAs, sized } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
@@ -9,6 +9,7 @@ import { ScanModal, canScan } from "../scanner";
 import { DriversAdmin, ShopsAdmin, Users as UsersAdmin } from "./admin/people";
 import { Payouts } from "./admin/money";
 import { Activity, AdsAdmin, AssignDriver, DeliveriesAdmin, SettingsAdmin } from "./admin/ops";
+import { CategoriesAdmin } from "./admin/categories";
 import { SupportPanel } from "./SupportPanel";
 import { ShopOwnerWorkspace } from "./ShopOwner";
 import { DeliveryWorkspace } from "./Delivery";
@@ -29,7 +30,7 @@ export function AdminShell({ token, user, signOut, tell }) {
   const [mobile, setMobile] = useState(false);
   const meta = useMeta();
   const [acting, setActing] = useState(null); // { kind: "shop" | "driver", entity }
-  const nav = [["overview", "Overview", LayoutDashboard], ["products", "Products", Package], ["orders", "Orders", ClipboardList], ["deliveries", "Deliveries", Truck], ["shops", "Shops", Store], ["drivers", "Delivery partners", UserCog], ["users", "Users", Users], ["ads", "Advertisements", Megaphone], ["payouts", "Payouts", Banknote], ["support", "Support", LifeBuoy], ["activity", "Activity log", History], ["settings", "Settings", Settings]];
+  const nav = [["overview", "Overview", LayoutDashboard], ["products", "Products", Package], ["categories", "Categories", Tags], ["orders", "Orders", ClipboardList], ["deliveries", "Deliveries", Truck], ["shops", "Shops", Store], ["drivers", "Delivery partners", UserCog], ["users", "Users", Users], ["ads", "Advertisements", Megaphone], ["payouts", "Payouts", Banknote], ["support", "Support", LifeBuoy], ["activity", "Activity log", History], ["settings", "Settings", Settings]];
   const [tick, setTick] = useState(0); // bump to reload the open section
 
   // "Manage as": the admin runs the real shop / driver workspace, with the backend acting as that account
@@ -63,6 +64,7 @@ export function AdminShell({ token, user, signOut, tell }) {
         {meta.loaded && !meta.apiVersion && <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Your API server looks out of date.</b> Ad placements, payouts, shop driver-assignment and the new admin tools need server v4.1 — deploy it and restart, otherwise those settings are silently ignored.</div>}
         {section === "overview" && <Overview key={tick} token={token} tell={tell} setSection={setSection}/>}
         {section === "products" && <Products key={tick} token={token} tell={tell}/>}
+        {section === "categories" && <CategoriesAdmin key={tick} token={token} tell={tell}/>}
         {section === "orders" && <Orders key={tick} token={token} tell={tell}/>}
         {section === "deliveries" && <DeliveriesAdmin key={tick} token={token} tell={tell} manageDriver={manageDriver}/>}
         {section === "shops" && <ShopsAdmin key={tick} token={token} tell={tell} manage={manageShop}/>}
@@ -206,7 +208,7 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
       <div><label className="label">Your SKU / item code</label><input className="input w-full" name="sku" value={form.sku} onChange={change}/></div>
       {owner && <div><label className="label">Cost price (₹) <span className="font-normal text-slate-400">— private, only you see it</span></label><input className="input w-full" type="number" min="0" step="0.01" name="costPrice" value={form.costPrice} onChange={change}/>{margin && <p className={cx("mt-1 text-xs font-semibold", margin.amount < 0 ? "text-red-600" : "text-emerald-700")}>{margin.amount < 0 ? "Selling below cost: " : "Profit per piece: "}{money(Math.abs(margin.amount))} ({margin.pct.toFixed(0)}%)</p>}</div>}
       <div><label className="label">Stock</label><input className="input w-full" type="number" min="0" name="stock" required value={form.stock} onChange={change}/></div>
-      <div><label className="label">Category</label><select className="input w-full" name="category" value={form.category} onChange={change}>{meta.categories.map((c) => <option key={c}>{c}</option>)}</select></div>
+      <div><label className="label">Category</label><select className="input w-full" name="category" value={form.category} onChange={change}>{(meta.categories.includes(form.category) || !form.category ? meta.categories : [form.category, ...meta.categories]).map((c) => <option key={c}>{c}</option>)}</select></div>
       <div><label className="label">Sizes (comma separated)</label><input className="input w-full" name="sizes" value={form.sizes} onChange={change} placeholder="S, M, L"/></div>
       {!owner && <div><label className="label">Shop (owner of this product)</label><select className="input w-full" name="shop" value={form.shop} onChange={change}><option value="">Platform (no shop)</option>{shops.map((s) => <option key={s._id} value={s._id}>{s.name} · {s.location}</option>)}{product?.shop?._id && !shops.some((x) => x._id === product.shop._id) && <option value={product.shop._id}>{product.shop.name}</option>}</select></div>}
       <div className="sm:col-span-2"><label className="label">Product images (up to 5)</label>
