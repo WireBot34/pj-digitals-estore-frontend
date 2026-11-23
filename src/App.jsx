@@ -48,7 +48,9 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [cartCount, setCartCount] = useState(0);
 
-  const [season] = useState(() => applyTheme());
+  const meta = useMeta();
+  const [season, setSeason] = useState(() => applyTheme());
+  useEffect(() => { setSeason(applyTheme(meta.theme)); }, [meta.theme]); // the admin can force or move a festival theme
   const noticeTimer = useRef(0);
   /** tell("Saved."), tell("Failed", "error"), tell("Removed", "success", { label: "Undo", onClick }) */
   const tell = useCallback((text, type = "success", action) => {

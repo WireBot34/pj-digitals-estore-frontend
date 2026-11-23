@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Edit3, ImagePlus, Plus, Trash2, Truck } from "lucide-react";
 import { api, money, qs } from "../../api";
 import { useMeta } from "../../meta";
+import { SEASONS } from "../../theme";
 import { AD_PLACEMENT_LABELS } from "../../ads";
 import { useList } from "../../useList";
 import { Empty, Loading, Pager, Pill, cx, prettify } from "../../ui";
@@ -155,17 +156,20 @@ const SETTING_FIELDS = [
   ["lowStockLevel", "Low-stock alert level", "Products at or below this are flagged.", "number", { min: 0, step: 1 }],
 ];
 
+const THEME_CHOICES = [["auto", "Automatic (by date)"], ["off", "Off: always the normal colours"], ...SEASONS.map((x) => [x.id, `Always on: ${x.label}`])];
+const prettyBuiltIn = (x) => { const f = (d) => new Date(2000, Number(d.slice(0, 2)) - 1, Number(d.slice(3))).toLocaleDateString("en-IN", { day: "numeric", month: "short" }); return `${f(x.from)} to ${f(x.to)}`; };
+
 export function SettingsAdmin({ token, tell }) {
   const [s, setS] = useState(null);
   const [busy, setBusy] = useState(false);
-  const load = useCallback(async () => { try { const d = (await api("/api/admin/settings", { token: await token() })).data; setS({ ...d, commissionPct: +(d.commissionRate * 100).toFixed(2), taxPct: +(d.taxRate * 100).toFixed(2) }); } catch (e) { tell(e.message, "error"); } }, [token, tell]);
+  const load = useCallback(async () => { try { const d = (await api("/api/admin/settings", { token: await token() })).data; setS({ ...d, commissionPct: +(d.commissionRate * 100).toFixed(2), taxPct: +(d.taxRate * 100).toFixed(2), dates: (() => { try { return d.seasonDates ? JSON.parse(d.seasonDates) : {}; } catch { return {}; } })() }); } catch (e) { tell(e.message, "error"); } }, [token, tell]);
   useEffect(() => { load(); }, [load]);
   if (!s) return <Loading/>;
   const set = (k) => (e) => setS((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   const save = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), codMaxAmount: Number(s.codMaxAmount) || 0, gstRegistered: !!s.gstRegistered, gstin: (s.gstin || "").trim(), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
+      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), codMaxAmount: Number(s.codMaxAmount) || 0, gstRegistered: !!s.gstRegistered, themeOverride: s.themeOverride || "auto", seasonDates: JSON.stringify(Object.fromEntries(Object.entries(s.dates || {}).filter(([, v]) => v?.[0] && v?.[1]))), gstin: (s.gstin || "").trim(), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
       await api("/api/admin/settings", { token: await token(), method: "PUT", body }); tell("Settings saved. Customers see changes within a minute."); await load();
     } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
   };
@@ -179,6 +183,13 @@ export function SettingsAdmin({ token, tell }) {
         {s.gstRegistered && <div className="mt-3 max-w-sm"><label className="label" htmlFor="gstin">GSTIN</label><input id="gstin" className="input mt-1 w-full uppercase" maxLength={15} placeholder="32ABCDE1234F1Z5" value={s.gstin || ""} onChange={set("gstin")}/></div>}
       </div>
       <label className="flex items-start gap-3 rounded-xl bg-slate-50 p-4 text-sm font-semibold sm:col-span-2"><input className="mt-1" type="checkbox" checked={!!s.shopsCanAssignDrivers} onChange={set("shopsCanAssignDrivers")}/><span>Let shop owners assign delivery partners to their own orders<span className="block text-xs font-normal text-slate-500">When off, only admins dispatch. You can still allow or block individual shops from the Shops page.</span></span></label>
+      <div className="rounded-xl bg-slate-50 p-4 sm:col-span-2">
+        <Field label="Festival colour theme" hint="The storefront changes colour for Vishu, Onam, Diwali, Christmas and New Year. Customers see a change within a minute.">
+          <select className="input w-full" value={s.themeOverride || "auto"} onChange={set("themeOverride")}>{THEME_CHOICES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        {(s.themeOverride || "auto") === "auto" && <div className="mt-4"><p className="text-sm font-semibold">Festival dates</p><p className="text-xs text-slate-500">Onam, Diwali and similar festivals move every year. Set this year's dates, or leave a row empty to use the built-in dates.</p>
+          <div className="mt-3 space-y-2">{SEASONS.map((x) => { const v = s.dates?.[x.id] || ["", ""]; const put = (i) => (e) => setS((cur) => { const row = [...(cur.dates?.[x.id] || ["", ""])]; row[i] = e.target.value; return { ...cur, dates: { ...cur.dates, [x.id]: row } }; });
+            return <div key={x.id} className="flex flex-wrap items-center gap-2 text-sm"><span className="w-24 font-semibold">{x.label}</span><input type="date" className="input w-auto py-1.5" aria-label={`${x.label} starts`} value={v[0].length === 10 ? v[0] : ""} onChange={put(0)}/><span className="text-slate-400">to</span><input type="date" className="input w-auto py-1.5" aria-label={`${x.label} ends`} value={v[1].length === 10 ? v[1] : ""} onChange={put(1)}/>{(v[0] || v[1]) ? <button type="button" className="text-xs font-semibold text-slate-500 underline" onClick={() => setS((cur) => ({ ...cur, dates: { ...cur.dates, [x.id]: ["", ""] } }))}>Use built-in</button> : <span className="text-xs text-slate-400">Built-in: {prettyBuiltIn(x)}</span>}</div>; })}</div></div>}
+      </div>
       <Field label="Storefront announcement" hint="Shown as a banner on every customer page. Leave empty to hide." className="sm:col-span-2"><input className="input w-full" value={s.announcement || ""} onChange={set("announcement")} placeholder="Festive offer: free delivery this weekend!"/></Field>
       <Field label="Support phone"><input className="input w-full" value={s.supportPhone || ""} onChange={set("supportPhone")}/></Field><Field label="Support email"><input className="input w-full" value={s.supportEmail || ""} onChange={set("supportEmail")}/></Field></div>
       <div className="mt-6 flex justify-end"><button disabled={busy} className="btn-primary">{busy ? "Saving..." : "Save settings"}</button></div></form>

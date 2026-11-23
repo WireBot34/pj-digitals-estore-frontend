@@ -41,28 +41,44 @@ export const SEASONS = [
   { id: "newyear", label: "New Year", from: "01-01", to: "01-03", hue: 215, sat: 55, greeting: "Happy New Year!" },
 ];
 
-const mmdd = (d) => `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const pad = (n) => String(n).padStart(2, "0");
+const mmdd = (d) => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const ymd = (d) => `${d.getFullYear()}-${mmdd(d)}`;
 const within = (day, from, to) => (from <= to ? day >= from && day <= to : day >= from || day <= to);
+/** from/to can be "MM-DD" (every year) or "YYYY-MM-DD" (that year only, set by an admin). */
+const inWindow = (now, from, to) => (from.length === 10 && to.length === 10 ? ymd(now) >= from && ymd(now) <= to : within(mmdd(now), from.slice(-5), to.slice(-5)));
 
-/** The season that applies today (or the one forced with ?theme=), or null for the normal green. */
-export function currentSeason(now = new Date(), forced = null) {
-  if (forced === "off") return null;
-  if (forced) return SEASONS.find((s) => s.id === forced) || null;
-  const day = mmdd(now);
-  return SEASONS.find((s) => within(day, s.from, s.to)) || null;
+/**
+ * The season that applies today, or null for the normal green. Order of priority:
+ *   1. ?theme=  in the address bar (a private preview for this tab)
+ *   2. the admin's choice from the server: "off", or one season forced on
+ *   3. automatic by date, using the admin's festival dates where set and the built-in dates otherwise
+ * server = { override: "auto" | "off" | seasonId, dates: { seasonId: [from, to] } }
+ */
+export function currentSeason(now = new Date(), forced = null, server = null) {
+  const pick = (id) => (id === "off" ? null : SEASONS.find((s) => s.id === id) || null);
+  if (forced) return pick(forced);
+  const mode = server?.override || "auto";
+  if (mode !== "auto") return pick(mode);
+  const dates = server?.dates || {};
+  return SEASONS.find((s) => {
+    const d = dates[s.id];
+    const [from, to] = Array.isArray(d) && d[0] && d[1] ? d : [s.from, s.to];
+    return inWindow(now, from, to);
+  }) || null;
 }
 
 const DEFAULT_SCALE = null; // the default green lives in index.css
 
 /** Reads ?theme=, remembers it for the tab, applies the CSS variables and returns the season. */
-export function applyTheme() {
+export function applyTheme(server = null) {
   let forced = null;
   try {
     const q = new URLSearchParams(window.location.search).get("theme");
     if (q) sessionStorage.setItem("pj_theme", q);
     forced = sessionStorage.getItem("pj_theme");
   } catch { /* storage can be blocked */ }
-  const season = currentSeason(new Date(), forced);
+  const season = currentSeason(new Date(), forced, server);
   const root = document.documentElement;
   const scale = season ? scaleFor(season.hue, season.sat) : DEFAULT_SCALE;
   STEPS.forEach(([step]) => {
