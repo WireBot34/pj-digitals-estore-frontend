@@ -1,5 +1,3 @@
-import colors from "tailwindcss/colors";
-
 /**
  * Design tokens.
  * The code base is written with Tailwind's `slate` and `indigo` utilities, so the whole look
@@ -7,14 +5,17 @@ import colors from "tailwindcss/colors";
  * and corners are tightened. No page needs to know the palette changed.
  */
 // Channels live in CSS variables (see :root in src/index.css) so src/theme.js can retint the whole site by season.
+// The neutral scale is also variable-driven, so dark mode only has to swap the variables (see index.css).
+const scale = (name) => Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((k) => [k, `rgb(var(--${name}-${k}) / <alpha-value>)`]));
 const brand = Object.fromEntries([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950].map((k) => [k, `rgb(var(--brand-${k}) / <alpha-value>)`]));
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
-      colors: { slate: colors.stone, indigo: brand, violet: brand, brand, paper: "#f6f4ef", ink: "#1c1b18" },
+      colors: { slate: scale("slate"), indigo: brand, violet: brand, brand, paper: "#f6f4ef", ink: "#1c1b18" },
       fontFamily: {
         sans: ['"Hanken Grotesk"', "system-ui", "sans-serif"],
         display: ['"Bricolage Grotesque"', '"Hanken Grotesk"', "system-ui", "sans-serif"],

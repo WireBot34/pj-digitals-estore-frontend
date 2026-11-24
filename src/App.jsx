@@ -3,6 +3,8 @@ import { Routes, Route, Navigate, Link, NavLink, useLocation, useNavigate, useNa
 import { useAuth, useClerk, useUser, SignInButton, SignUpButton, UserButton } from "@clerk/clerk-react";
 import { Home as HomeIcon, Search, ShoppingBag, Store, User, UserRound } from "lucide-react";
 import { applyTheme } from "./theme";
+import { ThemeToggle } from "./darkmode";
+import { LanguageToggle } from "./i18n";
 import { guestCart } from "./lib/store";
 import { installResponsiveTables } from "./tables";
 import { InstallBanner, registerServiceWorker } from "./pwa";
@@ -235,6 +237,8 @@ function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, ref
         </nav>
         <div className="flex items-center gap-1 sm:gap-2">
           <Link to="/shop" aria-label="Search products" className="grid h-10 w-10 place-items-center rounded-lg text-slate-700 hover:bg-slate-200/60"><Search size={20}/></Link>
+          <LanguageToggle/>
+          <ThemeToggle/>
           {signedIn && <NotificationBell token={token}/>}
           <Link to="/cart" aria-label={`Cart, ${cartCount} items`} className="relative hidden h-10 w-10 place-items-center rounded-lg text-slate-700 hover:bg-slate-200/60 md:grid">
             <ShoppingBag size={20}/>{cartCount > 0 && <span className="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand-600 px-1 text-[10px] font-bold text-white">{cartCount}</span>}

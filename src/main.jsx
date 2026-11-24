@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/clerk-react";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { MetaProvider } from "./meta";
+import { startTranslator } from "./i18n";
 import "./index.css";
 
 const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -14,3 +15,4 @@ function Root() {
   return <ClerkProvider publishableKey={key}><BrowserRouter><MetaProvider><App /></MetaProvider></BrowserRouter></ClerkProvider>;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><Root /></React.StrictMode>);
+startTranslator(); // Malayalam storefront text when the visitor chose it (or their phone is set to Malayalam)
