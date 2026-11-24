@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { SignInButton, useClerk } from "@clerk/clerk-react";
 import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
-import { BUSINESS } from "../config";
+import { useBrand, useBusiness } from "../brand";
 import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
 import { AdHero, AdStrip } from "../ads";
@@ -438,6 +438,8 @@ function Lightbox({ images, index, setIndex, close, alt }) {
 }
 
 export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
+  const brand = useBrand();
+  const BUSINESS = useBusiness();
   const { id } = useParams();
   const navigate = useNavigate();
   const meta = useMeta();
@@ -497,7 +499,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
     try { await api(`/api/wishlist/${p._id}`, { token: await token(), method: wished ? "DELETE" : "POST" }); setWished(!wished); tell(wished ? "Removed from wishlist." : "Saved to wishlist."); } catch (e) { tell(e.message, "error"); }
   };
   const share = async () => {
-    const data = { title: p.name, text: `${p.name} for ${money(p.price)} on PJ Digitals`, url: window.location.href };
+    const data = { title: p.name, text: `${p.name} for ${money(p.price)} on ${brand.name}`, url: window.location.href };
     try {
       if (navigator.share) await navigator.share(data);
       else { await navigator.clipboard.writeText(data.url); tell("Link copied."); }
@@ -662,6 +664,7 @@ const groupCart = (items, quote) => {
 const feeText = (n) => (n === 0 ? "Free" : money(n));
 
 export function Cart({ token, signedIn, refreshCartCount, tell }) {
+  const BUSINESS = useBusiness();
   usePageTitle("Cart");
   const meta = useMeta();
   const [cart, setCart] = useState(null);
@@ -770,6 +773,7 @@ const focusFirstError = () => window.setTimeout(() => document.querySelector('[a
 const choice = (on) => cx("flex cursor-pointer gap-3 rounded-lg border p-4 transition", on ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-slate-300 bg-white hover:border-slate-500");
 
 export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
+  const BUSINESS = useBusiness();
   usePageTitle("Checkout");
   const meta = useMeta();
   const navigate = useNavigate();
@@ -926,6 +930,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
 /* ------------------------------------------------------------ Order slip */
 /** Printable slip. Kept off-screen and revealed only when printing. Never says "tax invoice" unless a GSTIN is set in config. */
 function Slip({ orders, method }) {
+  const BUSINESS = useBusiness();
   const meta = useMeta();
   const gst = !!(meta.gstRegistered ?? BUSINESS.gstRegistered);
   const gstin = meta.gstin || BUSINESS.gstin;
@@ -1210,6 +1215,7 @@ export function Wishlist({ token, signedIn, tell }) {
 
 /* ----------------------------------------------------------------- Shops */
 export function Shops({ tell }) {
+  const brand = useBrand();
   usePageTitle("Shops");
   const meta = useMeta();
   const [sp, setSp] = useSearchParams();
@@ -1229,7 +1235,7 @@ export function Shops({ tell }) {
   }, [location, search, tell, retry]);
   return <Page>
     <AdStrip placement="shops" className="mb-8"/>
-    <PageTitle sub="Every product on PJ Digitals comes from one of these shops.">Shops</PageTitle>
+    <PageTitle sub={`Every product on ${brand.name} comes from one of these shops.`}>Shops</PageTitle>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="relative sm:w-80"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search shops" aria-label="Search shops" className="input w-full pl-10"/></div>
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0">

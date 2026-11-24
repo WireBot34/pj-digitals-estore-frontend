@@ -92,6 +92,9 @@ export const ML = {
 
 /** Sentences with a changing part (a number, a shop name). Each rule returns the Malayalam text or null. */
 export const ML_RULES = [
+  [/^Sell on (.+)$/, (m, n) => `${n}-ൽ വിൽക്കുക`],
+  [/^Add (.+) to your home screen$/, (m, n) => `${n} ഹോം സ്ക്രീനിൽ ചേർക്കുക`],
+  [/^Deliver with (.+)$/, (m, n) => `${n}-ൽ ഡെലിവറി ചെയ്യുക`],
   [/^We deliver in (.+?)\.( You can pay cash when your order arrives\.)?$/, (m, a, cash) => `${a}-ൽ ഞങ്ങൾ ഡെലിവറി ചെയ്യുന്നു.${cash ? " ഓർഡർ എത്തുമ്പോൾ പണമായി നൽകാം." : ""}`],
   [/^Phones, textiles and home appliances from local stores in (.+), delivered to your door\.$/, (m, a) => `${a}-ലെ പ്രാദേശിക കടകളിൽ നിന്നുള്ള ഫോണുകൾ, തുണിത്തരങ്ങൾ, ഗൃഹോപകരണങ്ങൾ - വീട്ടുപടിക്കൽ എത്തിക്കും.`],
   [/^Delivered in (.+)\. Delivery fee is shown on your order slip\.$/, (m, a) => `${a}-ൽ ഡെലിവർ ചെയ്യും. ഡെലിവറി ചാർജ് ഓർഡർ സ്ലിപ്പിൽ കാണാം.`],

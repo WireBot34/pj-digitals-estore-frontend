@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Store, Truck } from "lucide-react";
 import { api } from "../api";
 import { useMeta } from "../meta";
+import { useBrand } from "../brand";
 import { AuthPrompt, Pill, cx } from "../ui";
 
 const VEHICLES = ["bike", "scooter", "bicycle", "car", "van", "other"];
@@ -64,6 +65,7 @@ function useChecks(initial = []) {
 }
 
 function ShopForm({ token, tell, onDone }) {
+  const brand = useBrand();
   const meta = useMeta();
   const [f, setF] = useState({ name: "", phone: "", email: "", location: "", addressLine: "", landmark: "", description: "", openingHours: "" });
   const [cats, toggleCat] = useChecks();
@@ -87,7 +89,7 @@ function ShopForm({ token, tell, onDone }) {
   };
 
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-6">
-    <div className="flex items-center gap-3"><Store className="text-indigo-600" size={22}/><h2 className="text-lg font-extrabold">Sell on PJ Digitals</h2></div>
+    <div className="flex items-center gap-3"><Store className="text-indigo-600" size={22}/><h2 className="text-lg font-extrabold">Sell on {brand.name}</h2></div>
     <p className="mt-2 text-sm text-slate-500">Apply to list your shop. An admin reviews every application.</p>
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <div><label className="label">Shop name *</label><input required className="input mt-1 w-full" value={f.name} onChange={set("name")}/></div>
@@ -107,6 +109,7 @@ function ShopForm({ token, tell, onDone }) {
 }
 
 function DriverForm({ token, tell, onDone }) {
+  const brand = useBrand();
   const meta = useMeta();
   const vehicles = meta.vehicleTypes || VEHICLES;
   const [f, setF] = useState({ fullName: "", phone: "", vehicleType: "bike", vehicleNumber: "", licenseNumber: "" });
@@ -130,7 +133,7 @@ function DriverForm({ token, tell, onDone }) {
   };
 
   return <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-6">
-    <div className="flex items-center gap-3"><Truck className="text-indigo-600" size={22}/><h2 className="text-lg font-extrabold">Deliver with PJ Digitals</h2></div>
+    <div className="flex items-center gap-3"><Truck className="text-indigo-600" size={22}/><h2 className="text-lg font-extrabold">Deliver with {brand.name}</h2></div>
     <p className="mt-2 text-sm text-slate-500">Apply to become a delivery partner. An admin reviews every application.</p>
     <div className="mt-5 grid gap-4 sm:grid-cols-2">
       <div><label className="label">Full name *</label><input required className="input mt-1 w-full" value={f.fullName} onChange={set("fullName")}/></div>

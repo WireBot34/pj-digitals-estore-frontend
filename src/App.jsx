@@ -11,6 +11,7 @@ import { InstallBanner, registerServiceWorker } from "./pwa";
 import { LEGAL, Legal } from "./pages/Legal";
 import { api } from "./api";
 import { useMeta } from "./meta";
+import { BrandHead, useBrand } from "./brand";
 import { AuthPrompt, BackToTop, ConfirmProvider, Loading, Logo, Notice, OfflineBanner, Page, cx, usePageTitle } from "./ui";
 import {
   Account, Cart, Checkout, Home, NotificationBell, NotificationsPage, OrderSuccess, Orders, ProductDetail,
@@ -51,8 +52,9 @@ export default function App() {
   const [cartCount, setCartCount] = useState(0);
 
   const meta = useMeta();
-  const [season, setSeason] = useState(() => applyTheme());
-  useEffect(() => { setSeason(applyTheme(meta.theme)); }, [meta.theme]); // the admin can force or move a festival theme
+  const brand = useBrand();
+  const [season, setSeason] = useState(() => applyTheme(null, brand.colors.primary));
+  useEffect(() => { setSeason(applyTheme(meta.theme, brand.colors.primary)); }, [meta.theme, brand.colors.primary]); // the admin can force or move a festival theme
   const noticeTimer = useRef(0);
   /** tell("Saved."), tell("Failed", "error"), tell("Removed", "success", { label: "Undo", onClick }) */
   const tell = useCallback((text, type = "success", action) => {
@@ -169,6 +171,7 @@ export default function App() {
           refreshCartCount={refreshCartCount} tell={tell} signOut={signOut} season={season}/>
       )}
     </Suspense>
+    <BrandHead/>
     <InstallBanner/>
     <BackToTop/>
   </ConfirmProvider></ErrorBoundary>;
@@ -216,6 +219,7 @@ const navClass = ({ isActive }) => cx("relative py-1 text-sm font-medium transit
 
 function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, refreshCartCount, tell, signOut, season }) {
   const meta = useMeta();
+  const brand = useBrand();
   const location = useLocation();
   return <div className="flex min-h-screen flex-col bg-paper">
     <ScrollManager/>
@@ -223,7 +227,7 @@ function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, ref
     {meta.announcement && <div className="bg-ink px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">{meta.announcement}</div>}
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-paper/95">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6">
-        <Link to="/" aria-label="PJ Digitals home"><Logo/></Link>
+        <Link to="/" aria-label={`${brand.name} home`}><Logo/></Link>
         <nav aria-label="Main" className="hidden items-center gap-7 md:flex">
           <NavLink to="/" end className={navClass}>Home</NavLink>
           <NavLink to="/shop" className={navClass}>Products</NavLink>
@@ -274,7 +278,7 @@ function StoreShell({ user, signedIn, role, me, refreshMe, token, cartCount, ref
       </div>
       <footer className="border-t border-slate-200 md:hidden"><div className="flex flex-wrap gap-x-4 gap-y-2 px-4 py-5 text-xs text-slate-500">{LEGAL.map((d) => <Link key={d.slug} to={`/legal/${d.slug}`} className="hover:text-slate-900">{d.title}</Link>)}</div></footer>
     </div>
-    <footer className="no-print hidden border-t border-slate-200 md:block"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-8 gap-y-3 px-6 py-8 text-sm text-slate-500"><span>© {new Date().getFullYear()} PJ Digitals</span><span className="flex flex-wrap gap-x-6 gap-y-2">{LEGAL.map((d) => <Link key={d.slug} to={`/legal/${d.slug}`} className="hover:text-slate-900">{d.title}</Link>)}<Link to="/partner" className="hover:text-slate-900">Sell on PJ Digitals</Link></span></div></footer>
+    <footer className="no-print hidden border-t border-slate-200 md:block"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-8 gap-y-3 px-6 py-8 text-sm text-slate-500"><span>© {new Date().getFullYear()} {brand.name}</span><span className="flex flex-wrap gap-x-6 gap-y-2">{LEGAL.map((d) => <Link key={d.slug} to={`/legal/${d.slug}`} className="hover:text-slate-900">{d.title}</Link>)}<Link to="/partner" className="hover:text-slate-900">Sell on {brand.name}</Link></span></div></footer>
     <TabBar signedIn={signedIn} cartCount={cartCount}/>
   </div>;
 }

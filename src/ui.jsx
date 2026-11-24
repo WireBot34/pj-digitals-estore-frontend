@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { SignInButton } from "@clerk/clerk-react";
+import { useBrand } from "./brand";
 import { AlertCircle, ArrowUp, Check, CheckCircle2, ChevronLeft, ChevronRight, Package, RefreshCw, ShieldCheck, Star, WifiOff, X } from "lucide-react";
 
 export const cx = (...a) => a.filter(Boolean).join(" ");
@@ -83,9 +84,10 @@ export const PageTitle = ({ children, sub, right }) => <div className="mb-6 flex
 /* -------------------------------------------------------------- page title */
 /** Sets the browser tab title (also what shows in history and when sharing). */
 export function usePageTitle(title) {
+  const { name, tagline } = useBrand();
   useEffect(() => {
-    document.title = title ? `${title} · PJ Digitals` : "PJ Digitals · Shop from local stores";
-  }, [title]);
+    document.title = title ? `${title} · ${name}` : tagline ? `${name} · ${tagline}` : name;
+  }, [title, name, tagline]);
 }
 
 /* ------------------------------------------------------------ confirm sheet */
@@ -173,11 +175,18 @@ export function Steps({ current = 0, labels = ["Cart", "Checkout", "Done"] }) {
 }
 
 /* ------------------------------------------------------------------- logo */
-/** Simple logo mark: swap this one component when you have a real logo. */
+/** The brand logo from brand.json (a dark-mode variant is used in dark mode when given), else a simple mark + the name. */
 export function Logo({ className = "" }) {
+  const { name, logoUrl, logoDarkUrl } = useBrand();
+  if (logoUrl) {
+    return <span className={cx("inline-flex items-center", className)}>
+      <img src={logoUrl} alt={name} className={cx("h-8 w-auto max-w-[180px] object-contain sm:h-9", logoDarkUrl && "dark:hidden")}/>
+      {logoDarkUrl && <img src={logoDarkUrl} alt={name} className="hidden h-8 w-auto max-w-[180px] object-contain sm:h-9 dark:block"/>}
+    </span>;
+  }
   return <span className={cx("inline-flex items-center gap-2", className)}>
     <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="rgb(var(--brand-600))"/><path d="M9 24V8h7a5 5 0 0 1 0 10H9" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="23.5" cy="22.5" r="2" fill="#fff"/></svg>
-    <span className="font-display text-lg font-bold tracking-tight text-slate-950 sm:text-xl">PJ Digitals</span>
+    <span className="font-display text-lg font-bold tracking-tight text-slate-950 sm:text-xl">{name}</span>
   </span>;
 }
 

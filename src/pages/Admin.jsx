@@ -3,6 +3,7 @@ import { UserButton } from "@clerk/clerk-react";
 import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Tags, Trash2, Truck, UserCog, Users, X } from "lucide-react";
 import { api, imageOf, money, qs, setActAs, sized } from "../api";
 import { useMeta, statusLabel } from "../meta";
+import { useBrand } from "../brand";
 import { Empty, Loading, Pager, Pill, cx, orderTone, payTone, prettify } from "../ui";
 import { useList } from "../useList";
 import { ScanModal, canScan } from "../scanner";
@@ -26,6 +27,7 @@ const NEXT_STATUS = {
 };
 
 export function AdminShell({ token, user, signOut, tell }) {
+  const brand = useBrand();
   const [section, setSection] = useState("overview");
   const [mobile, setMobile] = useState(false);
   const meta = useMeta();
@@ -59,7 +61,7 @@ export function AdminShell({ token, user, signOut, tell }) {
       <div className="flex-1 overflow-y-auto px-4 py-6"><p className="px-3 text-[10px] font-bold uppercase tracking-[.2em] text-slate-500">Workspace</p><nav className="mt-3 space-y-1">{nav.map(([key, label, Icon]) => <button key={key} onClick={() => { setSection(key); setMobile(false); }} className={cx("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold", section === key ? "bg-indigo-600 text-white" : "text-slate-300 hover:bg-white/5")}><Icon size={18}/>{label}</button>)}</nav></div>
       <div className="border-t border-white/10 p-4"><div className="flex items-center gap-3 rounded-xl bg-white/5 p-3"><img src={user?.imageUrl} className="h-9 w-9 rounded-full bg-slate-700" alt=""/><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{user?.fullName || "Administrator"}</p><p className="text-xs text-indigo-300">Administrator</p></div><button title="Sign out" onClick={() => signOut()}><LogOut size={16}/></button></div></div></aside>
     {mobile && <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobile(false)}/>}
-    <div className="min-h-screen md:pl-64"><header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-paper px-4 sm:px-6 md:px-8"><div className="flex items-center gap-3"><button className="md:hidden" onClick={() => setMobile(true)}><Menu/></button><div><p className="text-xs font-semibold text-slate-400">PJ Digitals / Admin</p><h1 className="font-display text-xl font-extrabold">{section === "overview" ? "Dashboard" : nav.find((n) => n[0] === section)?.[1]}</h1></div></div><div className="flex items-center gap-3"><a href="/" className="hidden rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:block">View store</a><button onClick={() => setTick(tick + 1)} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50" title="Refresh"><RefreshCw size={17}/></button><UserButton/></div></header>
+    <div className="min-h-screen md:pl-64"><header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-paper px-4 sm:px-6 md:px-8"><div className="flex items-center gap-3"><button className="md:hidden" onClick={() => setMobile(true)}><Menu/></button><div><p className="text-xs font-semibold text-slate-400">{brand.name} / Admin</p><h1 className="font-display text-xl font-extrabold">{section === "overview" ? "Dashboard" : nav.find((n) => n[0] === section)?.[1]}</h1></div></div><div className="flex items-center gap-3"><a href="/" className="hidden rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:block">View store</a><button onClick={() => setTick(tick + 1)} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50" title="Refresh"><RefreshCw size={17}/></button><UserButton/></div></header>
       <main className="mx-auto max-w-7xl p-5 md:p-8">
         {meta.loaded && !meta.apiVersion && <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><b>Your API server looks out of date.</b> Ad placements, payouts, shop driver-assignment and the new admin tools need server v4.1 — deploy it and restart, otherwise those settings are silently ignored.</div>}
         {section === "overview" && <Overview key={tick} token={token} tell={tell} setSection={setSection}/>}

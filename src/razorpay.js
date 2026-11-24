@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { currentBrand } from "./brand";
 
 let loader = null;
 
@@ -28,7 +29,7 @@ function openSheet(payment) {
       order_id: payment.razorpayOrderId,
       amount: payment.amount,
       currency: payment.currency,
-      name: "PJ Digitals",
+      name: currentBrand().name,
       prefill: payment.prefill,
       theme: { color: "#4f46e5" },
       handler: resolve,

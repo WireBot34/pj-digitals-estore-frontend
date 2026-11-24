@@ -4,14 +4,16 @@ import { Link } from "react-router-dom";
 import { UserButton } from "@clerk/clerk-react";
 import { NotificationBell } from "./Customer";
 import { Pill, cx } from "../ui";
+import { useBrand } from "../brand";
 
 /** Shared page chrome for the shop-owner and delivery-partner workspaces. */
 export function WorkspaceFrame({ title, subtitle, tabs, tab, setTab, actions, token, children, exit }) {
+  const brand = useBrand();
   return <div className="min-h-screen bg-paper">
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-paper">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
         <div className="min-w-0">
-          <p className="flex items-center gap-2 font-display text-base font-bold sm:text-lg">PJ Digitals{exit && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">Admin mode</span>}</p>
+          <p className="flex items-center gap-2 font-display text-base font-bold sm:text-lg">{brand.name}{exit && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">Admin mode</span>}</p>
           <p className="truncate text-xs text-slate-500">{title}{subtitle ? ` · ${subtitle}` : ""}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">{actions}<ThemeToggle/>{exit

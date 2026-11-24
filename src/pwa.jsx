@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { Download, Share, X } from "lucide-react";
+import { useBrand } from "./brand";
 
 /* ---------------------------------------------------------------- install state */
 let deferred = null; // the browser's install prompt, once it offers one
@@ -59,6 +60,7 @@ const recentlyDismissed = () => { try { return Date.now() - Number(localStorage.
 
 /** Small card offering to install the app. Shown a few seconds after the browser says it can. */
 export function InstallBanner() {
+  const brand = useBrand();
   const { canInstall, install, ios, installed } = useInstall();
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -71,7 +73,7 @@ export function InstallBanner() {
   return <div role="dialog" aria-label="Install the app" className="no-print fixed inset-x-3 bottom-[calc(4.75rem+var(--safe-bottom))] z-40 mx-auto flex max-w-md items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl md:bottom-6 md:left-auto md:right-6 md:mx-0">
     <img src="/icons/icon-192.png" alt="" width="40" height="40" className="h-10 w-10 shrink-0 rounded-lg"/>
     <div className="min-w-0 flex-1">
-      <p className="text-sm font-semibold">Add PJ Digitals to your home screen</p>
+      <p className="text-sm font-semibold">Add {brand.name} to your home screen</p>
       {ios && !canInstall
         ? <p className="mt-0.5 text-xs text-slate-600">Tap <Share size={12} className="mx-0.5 inline"/> Share, then "Add to Home Screen".</p>
         : <p className="mt-0.5 text-xs text-slate-600">Opens faster and works like an app.</p>}
