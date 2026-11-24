@@ -193,8 +193,36 @@ export function SettingsAdmin({ token, tell }) {
       <Field label="Storefront announcement" hint="Shown as a banner on every customer page. Leave empty to hide." className="sm:col-span-2"><input className="input w-full" value={s.announcement || ""} onChange={set("announcement")} placeholder="Festive offer: free delivery this weekend!"/></Field>
       <Field label="Support phone"><input className="input w-full" value={s.supportPhone || ""} onChange={set("supportPhone")}/></Field><Field label="Support email"><input className="input w-full" value={s.supportEmail || ""} onChange={set("supportEmail")}/></Field></div>
       <div className="mt-6 flex justify-end"><button disabled={busy} className="btn-primary">{busy ? "Saving..." : "Save settings"}</button></div></form>
+    <BrandingCard token={token}/>
     <Broadcast token={token} tell={tell}/>
   </>;
+}
+
+/** Read-only: shows what brand.json currently resolves to on the server, plus any problems found in it. */
+function BrandingCard({ token }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    try { setD((await api("/api/admin/brand", { token: await token() })).data); setErr(""); } catch (e) { setErr(e.message); }
+  }, [token]);
+  useEffect(() => { load(); }, [load]);
+  const b = d?.brand;
+  const row = (k, v) => <div key={k} className="flex justify-between gap-4 border-b border-slate-100 py-2 text-sm"><dt className="text-slate-500">{k}</dt><dd className="break-all text-right font-medium">{v || <span className="text-slate-400">not set</span>}</dd></div>;
+  return <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-lg font-extrabold">Branding</h3><button type="button" onClick={load} className="btn-secondary !px-3 !py-1.5">Refresh</button></div>
+    <p className="mt-1 text-sm text-slate-500">Name, logo, icons, colours and business details come from <code>brand.json</code> on the server (<code>{d?.dir || "/app/brand"}</code>). Edit that file; changes show within a few seconds.</p>
+    {err && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">Could not read the branding: {err}</p>}
+    {b && <>
+      {d.warnings?.length > 0 && <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Fix these in brand.json (the default is used meanwhile):</p><ul className="mt-1 list-disc space-y-1 pl-5">{d.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></div>}
+      {d.warnings?.length === 0 && <p className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">brand.json is valid.</p>}
+      <dl className="mt-4 grid gap-x-8 sm:grid-cols-2">
+        <div>{row("Name", b.name)}{row("Short name", b.shortName)}{row("Tagline", b.tagline)}{row("Domain", b.domain)}{row("Primary colour", b.colors?.primary)}{row("Operator", b.business?.operator)}</div>
+        <div>{row("Phone", b.contact?.phone)}{row("Email", b.contact?.email)}{row("Address", b.contact?.address)}{row("Logo", b.images?.logo)}{row("Icon", b.images?.icon || b.images?.favicon)}{row("Share image", b.images?.shareImage)}</div>
+      </dl>
+      {b.logoUrl && <div className="mt-4 flex flex-wrap items-center gap-6 text-sm text-slate-500"><span>Logo preview</span><img src={b.logoUrl} alt="" className="h-10 w-auto rounded bg-white p-1 ring-1 ring-slate-200"/>{b.logoDarkUrl && <img src={b.logoDarkUrl} alt="" className="h-10 w-auto rounded bg-slate-900 p-1"/>}</div>}
+      {d.files?.length > 0 && <p className="mt-4 text-xs text-slate-500">Images found in the folder: {d.files.join(", ")}</p>}
+    </>}
+  </section>;
 }
 
 function Broadcast({ token, tell }) {

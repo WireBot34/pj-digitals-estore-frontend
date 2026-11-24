@@ -1,18 +1,19 @@
 import React from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { BUSINESS as B } from "../config";
+import { useBusiness } from "../brand";
 import { useMeta } from "../meta";
 import { Page, cx, usePageTitle } from "../ui";
 
 /* A value from src/config.js, or a clear marker if it has not been filled in yet. */
-const V = ({ v, what }) => (v ? <>{v}</> : <mark className="rounded bg-amber-200 px-1 text-amber-950" title="Open src/config.js and fill this in">[add {what} in src/config.js]</mark>);
+const V = ({ v, what }) => (v ? <>{v}</> : <mark className="rounded bg-amber-200 px-1 text-amber-950" title="Fill this in brand.json on the server">[add {what} in brand.json]</mark>);
 const H = ({ children }) => <h2 className="mt-8 font-display text-lg font-bold first:mt-0">{children}</h2>;
 const P = ({ children }) => <p className="mt-2 leading-7 text-slate-700">{children}</p>;
 const L = ({ items }) => <ul className="mt-2 list-disc space-y-1.5 pl-5 leading-7 text-slate-700">{items.map((t, i) => <li key={i}>{t}</li>)}</ul>;
 
-const Operator = () => <V v={B.operator} what="the operator name"/>;
+const Operator = () => { const B = useBusiness(); return <V v={B.operator} what="the operator name"/>; };
 
 function Terms() {
+  const B = useBusiness();
   const meta = useMeta();
   return <>
     <H>1. Who we are</H>
@@ -47,6 +48,7 @@ function Terms() {
 }
 
 function Privacy() {
+  const B = useBusiness();
   return <>
     <P>This explains what personal information {B.name} collects, why, and what you can do about it. It is written to follow India's Digital Personal Data Protection Act, 2023.</P>
     <H>What we collect</H>
@@ -83,6 +85,7 @@ function Privacy() {
 }
 
 function Refunds() {
+  const B = useBusiness();
   return <>
     <H>Cancelling an order</H>
     <L items={[
@@ -107,6 +110,7 @@ function Refunds() {
 }
 
 function Shipping() {
+  const B = useBusiness();
   const meta = useMeta();
   return <>
     <H>Where we deliver</H>
@@ -125,6 +129,7 @@ function Shipping() {
 }
 
 function Contact() {
+  const B = useBusiness();
   const meta = useMeta();
   const g = B.grievanceOfficer;
   const phone = B.phone || meta.supportPhone;
@@ -150,6 +155,7 @@ export const LEGAL = [
 ];
 
 export function Legal() {
+  const B = useBusiness();
   const { doc } = useParams();
   const current = LEGAL.find((d) => d.slug === doc);
   usePageTitle(current?.title);

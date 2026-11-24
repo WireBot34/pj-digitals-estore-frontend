@@ -71,7 +71,21 @@ export function currentSeason(now = new Date(), forced = null, server = null) {
 const DEFAULT_SCALE = null; // the default green lives in index.css
 
 /** Reads ?theme=, remembers it for the tab, applies the CSS variables and returns the season. */
-export function applyTheme(server = null) {
+/** "#2f7d4f" -> { hue, sat } for scaleFor, or null if it isn't a 6-digit hex or is grey. */
+export function hueSatOf(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return null;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  if (d < 0.04) return null;
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = Math.round(((h * 60) + 360) % 360);
+  const l = (max + min) / 2;
+  const s = d / (1 - Math.abs(2 * l - 1));
+  return { hue: h, sat: Math.max(30, Math.min(75, Math.round(s * 100))) };
+}
+
+export function applyTheme(server = null, primary = "") {
   let forced = null;
   try {
     const q = new URLSearchParams(window.location.search).get("theme");
@@ -80,7 +94,8 @@ export function applyTheme(server = null) {
   } catch { /* storage can be blocked */ }
   const season = currentSeason(new Date(), forced, server);
   const root = document.documentElement;
-  const scale = season ? scaleFor(season.hue, season.sat) : DEFAULT_SCALE;
+  const own = !season && hueSatOf(primary); // brand.json colour, unless a festival theme is on
+  const scale = season ? scaleFor(season.hue, season.sat) : own ? scaleFor(own.hue, own.sat) : DEFAULT_SCALE;
   STEPS.forEach(([step]) => {
     if (scale) root.style.setProperty(`--brand-${step}`, scale[step]);
     else root.style.removeProperty(`--brand-${step}`);
