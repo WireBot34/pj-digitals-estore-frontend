@@ -12,6 +12,9 @@ import { useInstall } from "../pwa";
 import { AuthPrompt, Empty, ErrorState, Page, PageTitle, Pager, Pill, ProductGridSkeleton, ReasonSheet, Skeleton, Stars, Steps, cx, orderTone, payTone, prettify, useConfirm, usePageTitle } from "../ui";
 import { LEGAL } from "./Legal";
 
+// 8-80 plain characters; the server ignores anything else
+const newAttemptKey = () => (globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, "");
+
 const imagesOf = (images) => (Array.isArray(images) ? images.map((i) => (typeof i === "string" ? i : i?.url || i?.secure_url || "")).filter(Boolean) : []);
 const discountOf = (p) => (p.comparePrice > p.price ? Math.round((1 - p.price / p.comparePrice) * 100) : 0);
 const mapsLink = (a) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([a.street, a.location, a.city, a.state, a.zipCode].filter(Boolean).join(", "))}`;
@@ -773,6 +776,7 @@ const focusFirstError = () => window.setTimeout(() => document.querySelector('[a
 const choice = (on) => cx("flex cursor-pointer gap-3 rounded-lg border p-4 transition", on ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-slate-300 bg-white hover:border-slate-500");
 
 export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
+  const attemptKey = useRef(null); // one key per checkout attempt, so a retry or double tap can't place the order twice
   const BUSINESS = useBusiness();
   usePageTitle("Checkout");
   const meta = useMeta();
@@ -828,7 +832,8 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     setBusy(true);
     try {
       const t = await token();
-      const body = { paymentMethod: payment, notes: notes || undefined };
+      if (!attemptKey.current) attemptKey.current = newAttemptKey();
+      const body = { paymentMethod: payment, notes: notes || undefined, idempotencyKey: attemptKey.current };
       if (addressId) {
         body.addressId = addressId;
       } else {
@@ -842,6 +847,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
       }
 
       const placed = await api("/api/orders", { token: t, method: "POST", body });
+      attemptKey.current = null; // placed: the next checkout is a new attempt
       await refreshCartCount();
 
       let paid = false;
