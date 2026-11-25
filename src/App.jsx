@@ -12,6 +12,7 @@ import { LEGAL, Legal } from "./pages/Legal";
 import { api } from "./api";
 import { useMeta } from "./meta";
 import { BrandHead, useBrand } from "./brand";
+import { reportError } from "./errorReport";
 import { AuthPrompt, BackToTop, ConfirmProvider, Loading, Logo, Notice, OfflineBanner, Page, cx, usePageTitle } from "./ui";
 import {
   Account, Cart, Checkout, Home, NotificationBell, NotificationsPage, OrderSuccess, Orders, ProductDetail,
@@ -29,7 +30,7 @@ const DeliveryWorkspace = lazy(() => import("./pages/Delivery").then((m) => ({ d
 class ErrorBoundary extends Component {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error) { console.error("Screen crashed:", error); }
+  componentDidCatch(error) { console.error("Screen crashed:", error); reportError(error, { tags: { where: "ErrorBoundary" } }); }
   render() {
     if (!this.state.failed) return this.props.children;
     return <main className="grid min-h-screen place-items-center bg-paper px-6 text-center"><div className="max-w-sm">
