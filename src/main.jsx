@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { MetaProvider } from "./meta";
 import { startTranslator } from "./i18n";
+import { installErrorHandlers } from "./errorReport";
 import "./index.css";
 
 const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -15,4 +16,5 @@ function Root() {
   return <ClerkProvider publishableKey={key}><BrowserRouter><MetaProvider><App /></MetaProvider></BrowserRouter></ClerkProvider>;
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><Root /></React.StrictMode>);
+installErrorHandlers(); // crashes reach the error tracker when the server has one configured
 startTranslator(); // Malayalam storefront text when the visitor chose it (or their phone is set to Malayalam)

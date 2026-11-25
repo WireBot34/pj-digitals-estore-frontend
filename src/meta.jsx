@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { api } from "./api";
 import { rememberBrand } from "./brand";
+import { configureErrorReporting } from "./errorReport";
 
 // Used until /api/meta answers (and if it can't be reached).
 export const DEFAULT_META = {
@@ -23,7 +24,7 @@ const MetaContext = createContext(DEFAULT_META);
 export function MetaProvider({ children }) {
   const [meta, setMeta] = useState(DEFAULT_META);
   useEffect(() => {
-    const load = () => api("/api/meta").then((r) => r.data && (rememberBrand(r.data.brand), setMeta({ ...DEFAULT_META, ...r.data, loaded: true }))).catch(() => {});
+    const load = () => api("/api/meta").then((r) => r.data && (rememberBrand(r.data.brand), configureErrorReporting(r.data.monitoring?.dsn), setMeta({ ...DEFAULT_META, ...r.data, loaded: true }))).catch(() => {});
     load();
     window.addEventListener("meta:reload", load); // the admin changed categories or settings
     return () => window.removeEventListener("meta:reload", load);
