@@ -182,6 +182,15 @@ export function Shop({ tell }) {
   const [search, setSearch] = useState(sp.get("search") || "");
   const [focused, setFocused] = useState(false);
   const [recents, setRecents] = useState(() => recentSearches.list());
+  // product name suggestions while typing (the server forgives typos and word order)
+  const [suggestions, setSuggestions] = useState([]);
+  useEffect(() => {
+    const t = search.trim();
+    if (!focused || t.length < 2) { setSuggestions([]); return undefined; }
+    let live = true;
+    const timer = setTimeout(() => { api("/api/products/suggest" + qs({ q: t })).then((r) => live && setSuggestions(r.data || [])).catch(() => live && setSuggestions([])); }, 200);
+    return () => { live = false; clearTimeout(timer); };
+  }, [search, focused]);
   const [products, setProducts] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -261,6 +270,9 @@ export function Shop({ tell }) {
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17}/>
             <input value={search} onChange={(e) => setSearch(e.target.value)} onFocus={() => { setRecents(recentSearches.list()); setFocused(true); }} onBlur={() => { setTimeout(() => setFocused(false), 150); if (search.trim()) commitSearch(search); }} onKeyDown={(e) => { if (e.key === "Enter") { e.currentTarget.blur(); } }} placeholder="Search products" aria-label="Search products" enterKeyHint="search" className="input w-full pl-10"/>
+            {focused && search.trim().length >= 2 && suggestions.length > 0 && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg" role="listbox" aria-label="Suggestions">
+              {suggestions.map((x) => <Link key={x._id} to={`/product/${x._id}`} onMouseDown={(e) => e.preventDefault()} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm hover:bg-slate-50" role="option"><span className="truncate">{x.name}</span><span className="shrink-0 text-xs text-slate-400">{x.category}</span></Link>)}
+            </div>}
             {focused && !search && recents.length > 0 && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
               <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-500"><span>Recent searches</span><button onMouseDown={(e) => e.preventDefault()} onClick={() => { recentSearches.clear(); setRecents([]); }} className="font-medium hover:text-slate-900">Clear</button></div>
               {recents.map((r) => <div key={r} className="flex items-center hover:bg-slate-50"><button onMouseDown={(e) => e.preventDefault()} onClick={() => pickRecent(r)} className="flex flex-1 items-center gap-2 px-3 py-2.5 text-left text-sm"><Clock size={14} className="text-slate-400"/>{r}</button><button onMouseDown={(e) => e.preventDefault()} onClick={() => { recentSearches.remove(r); setRecents(recentSearches.list()); }} aria-label={`Remove ${r}`} className="px-3 py-2.5 text-slate-400 hover:text-slate-900"><X size={14}/></button></div>)}
