@@ -31,11 +31,21 @@ export function Home() {
   const meta = useMeta();
   const navigate = useNavigate();
   const [featured, setFeatured] = useState([]);
+  const [assured, setAssured] = useState([]);
+  const [fresh, setFresh] = useState([]);
+  const [shops, setShops] = useState([]);
   const [q, setQ] = useState("");
   const [hint, setHint] = useState(() => { try { return !localStorage.getItem("pj_hint_seen"); } catch { return false; } });
   useEffect(() => {
+    // each row loads on its own, so one slow or failing request never blanks the page
     api("/api/products" + qs({ featured: "true", limit: 8 })).then((r) => setFeatured(r.data || [])).catch(() => {});
+    api("/api/products" + qs({ assured: "true", limit: 8 })).then((r) => setAssured(r.data || [])).catch(() => {});
+    api("/api/products" + qs({ sort: "newest", limit: 8 })).then((r) => setFresh(r.data || [])).catch(() => {});
+    api("/api/shops" + qs({ limit: 6 })).then((r) => setShops(r.data || [])).catch(() => {});
   }, []);
+  // "Just added" shouldn't repeat what is already shown above it
+  const shown = new Set([...featured, ...assured].map((p) => p._id));
+  const justAdded = fresh.filter((p) => !shown.has(p._id)).slice(0, 8);
   const search = (e) => { e.preventDefault(); recentSearches.add(q); navigate("/shop" + qs({ search: q.trim() })); };
   const closeHint = () => { try { localStorage.setItem("pj_hint_seen", "1"); } catch { /* ignore */ } setHint(false); };
 
@@ -48,7 +58,7 @@ export function Home() {
           <button onClick={closeHint} aria-label="Dismiss" className="-m-1 shrink-0 p-1"><X size={16}/></button>
         </div>}
         <h1 className="max-w-2xl font-display text-[2rem] font-bold leading-[1.1] sm:text-5xl">Buy from the shops in your town.</h1>
-        <p className="mt-3 max-w-xl text-base text-slate-600 sm:mt-4 sm:text-lg">Phones, textiles and home appliances from local stores in {meta.locations.join(" and ")}, delivered to your door.</p>
+        <p className="mt-3 max-w-xl text-base text-slate-600 sm:mt-4 sm:text-lg">Everyday things from local stores in {meta.locations.join(" and ")}, delivered to your door.</p>
         <form onSubmit={search} className="mt-6 flex max-w-xl gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
@@ -70,6 +80,33 @@ export function Home() {
         <Link to="/shop" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">All products <ArrowRight size={15}/></Link>
       </div>
       <ProductGrid products={featured}/>
+    </section>}
+
+    {assured.length > 0 && <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="inline-flex items-center gap-2 font-display text-xl font-bold sm:text-2xl"><ShieldCheck size={22} className="text-green-700"/> Assured picks</h2>
+        <Link to="/shop?assured=true" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">See all <ArrowRight size={15}/></Link>
+      </div>
+      <ProductGrid products={assured}/>
+    </section>}
+
+    {justAdded.length > 0 && <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="font-display text-xl font-bold sm:text-2xl">Just added</h2>
+        <Link to="/shop" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">Browse all <ArrowRight size={15}/></Link>
+      </div>
+      <ProductGrid products={justAdded}/>
+    </section>}
+
+    {shops.length > 0 && <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="font-display text-xl font-bold sm:text-2xl">Our shops</h2>
+        <Link to="/shops" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">All shops <ArrowRight size={15}/></Link>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shops.map((s) => <Link key={s._id} to={`/shop?shop=${s._id}`} className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-400">
+        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100">{s.logo ? <img src={sized(s.logo, "sm")} alt="" loading="lazy" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-400"><Store size={22} strokeWidth={1.5}/></div>}</div>
+        <div className="min-w-0"><div className="flex items-center gap-2"><h3 className="truncate font-semibold">{s.name}</h3><span className={cx("h-2 w-2 shrink-0 rounded-full", s.isOpen === false ? "bg-red-500" : "bg-emerald-500")} title={s.isOpen === false ? "Closed now" : "Open"}/></div>{s.location && <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500"><MapPin size={12} className="shrink-0"/>{s.location}</p>}</div>
+      </Link>)}</div>
     </section>}
 
     <RecentlyViewed className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14"/>
