@@ -972,19 +972,21 @@ function Slip({ orders, method }) {
   const gstin = meta.gstin || BUSINESS.gstin;
   const date = (d) => new Date(d || Date.now()).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
   return <div id="slip" className="slip-offscreen p-6 text-sm text-black">
-    <div className="flex items-start justify-between border-b border-black pb-3"><div><p className="text-lg font-bold">{BUSINESS.name}</p><p className="text-xs">{BUSINESS.domain}</p>{gst && gstin && <p className="text-xs">GSTIN: {gstin}</p>}</div><p className="text-right text-xs font-bold uppercase">{gst ? "Order slip" : "Order slip (not a tax invoice)"}</p></div>
+    <div className="flex items-start justify-between border-b border-black pb-3"><div><p className="text-lg font-bold">{BUSINESS.name}</p><p className="text-xs">{BUSINESS.domain}</p>{gst && gstin && <p className="text-xs">GSTIN: {gstin}</p>}</div><p className="text-right text-xs font-bold uppercase">{orders.some((o) => o.invoiceNumber) ? "Invoice" : gst ? "Order slip" : "Order slip (not a tax invoice)"}</p></div>
     {orders.map((o) => {
       const a = o.shippingAddress || {};
       const sub = o.subtotal ?? (o.items || []).reduce((s, it) => s + it.price * it.quantity, 0);
       return <section key={o._id || o.orderNumber} className="mt-4 break-inside-avoid border-b border-dashed border-black pb-4">
+        {o.invoiceNumber && <div className="flex justify-between"><b>Invoice No. {o.invoiceNumber}</b><span>{date(o.invoiceDate || o.deliveredAt)}</span></div>}
         <div className="flex justify-between"><b>Order {o.orderNumber}</b><span>{date(o.createdAt)}</span></div>
-        {shopName(o) && <p>Sold by: {shopName(o)}</p>}
+        {shopName(o) && <p>Sold by: {shopName(o)}{o.shop?.addressLine ? `, ${o.shop.addressLine}` : ""}</p>}
         {(a.fullName || a.street) && <p>Deliver to: {[a.fullName, a.phone, a.street, a.location, a.city, a.state, a.zipCode].filter(Boolean).join(", ")}</p>}
         <table className="keep-table mt-2 w-full text-left"><thead><tr><th className="py-1">Item</th><th>Qty</th><th className="text-right">Amount</th></tr></thead><tbody>{(o.items || []).map((it, i) => <tr key={i}><td className="py-0.5">{it.name || it.product?.name}{it.size ? ` (${it.size})` : ""}</td><td>{it.quantity}</td><td className="text-right">{money(it.price * it.quantity)}</td></tr>)}</tbody></table>
         <div className="mt-2 ml-auto w-56 space-y-0.5"><p className="flex justify-between"><span>Subtotal</span><span>{money(sub)}</span></p><p className="flex justify-between"><span>Delivery</span><span>{money(o.shippingCost || 0)}</span></p>{o.tax > 0 && <p className="flex justify-between"><span>Tax</span><span>{money(o.tax)}</span></p>}<p className="flex justify-between border-t border-black pt-1 font-bold"><span>Total</span><span>{money(o.totalAmount)}</span></p></div>
         <p className="mt-2 text-xs">{(o.paymentMethod || method) === "cod" ? `Pay ${money(o.totalAmount)} in cash on delivery.` : `Payment: ${o.paymentStatus || "pending"}`}</p>
       </section>;
     })}
+    {orders.some((o) => o.invoiceNumber) && !gst && <p className="mt-3 text-xs">GST is not charged on this invoice (seller not registered under GST).</p>}
     <p className="mt-4 text-xs">Questions? {BUSINESS.phone || "Use the Help page"}{BUSINESS.email ? ` · ${BUSINESS.email}` : ""} · {BUSINESS.domain}/legal/contact</p>
   </div>;
 }
@@ -1092,6 +1094,11 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
     setBusyId(o._id);
     try { await api(`/api/orders/${o._id}/cancel`, { token: await token(), method: "PUT", body: { reason, note } }); tell("Order cancelled."); setCancelling(null); await load(); } catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
   };
+  const invoice = async (o) => {
+    setBusyId(o._id);
+    try { const r = await api(`/api/orders/${o._id}/invoice`, { token: await token(), method: "POST" }); setPrinting(r.data); load(); } // the server gives it its number the first time
+    catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
+  };
   const payNow = async (o) => {
     setBusyId(o._id);
     try {
@@ -1147,7 +1154,9 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
           {canCancel && <button disabled={busyId === o._id} onClick={() => setCancelling(o)} className="btn-secondary px-4 py-2">Cancel order</button>}
           {o.orderStatus !== "cancelled" && <button onClick={() => setTracking(tracking === o._id ? null : o._id)} className="btn-secondary px-4 py-2">{tracking === o._id ? "Hide details" : "Delivery details"}</button>}
           <button disabled={busyId === o._id} onClick={() => reorder(o)} className="btn-secondary px-4 py-2"><RotateCcw size={15}/> Order again</button>
-          <button onClick={() => setPrinting(o)} className="btn-secondary px-4 py-2"><Printer size={15}/> Order slip</button>
+          {o.orderStatus === "delivered"
+            ? <button disabled={busyId === o._id} onClick={() => invoice(o)} className="btn-secondary px-4 py-2"><Printer size={15}/> Invoice</button>
+            : <button onClick={() => setPrinting(o)} className="btn-secondary px-4 py-2"><Printer size={15}/> Order slip</button>}
         </div>
         {tracking === o._id && <Tracking orderId={o._id} token={token} shop={o.shop && typeof o.shop === "object" ? o.shop : null}/>}
       </article>;
