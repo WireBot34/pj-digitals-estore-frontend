@@ -6,6 +6,14 @@ import { Field, Modal, SectionHead } from "./common";
 
 const reloadMeta = () => window.dispatchEvent(new Event("meta:reload")); // shop, driver and address forms pick up the change
 
+const deliveryText = (c) => {
+  if (c.deliveryEnabled === false) return "Deliveries paused";
+  const bits = [c.deliveryFee == null ? "default fee" : c.deliveryFee === 0 ? "free delivery" : `₹${c.deliveryFee} delivery`];
+  if (c.freeAbove != null) bits.push(c.freeAbove > 0 ? `free above ₹${c.freeAbove}` : "no free-delivery offer");
+  if (c.minOrder) bits.push(`min order ₹${c.minOrder}`);
+  return bits.join(" · ");
+};
+
 export function LocationsAdmin({ token, tell }) {
   const [rows, setRows] = useState(null);
   const [name, setName] = useState("");
@@ -28,7 +36,7 @@ export function LocationsAdmin({ token, tell }) {
   const add = async (e) => { e.preventDefault(); if (!name.trim()) return; if (await call("/api/admin/locations", "POST", { name }, `Added "${name.trim()}".`)) setName(""); };
   const rename = async (e) => {
     e.preventDefault();
-    const r = await call(`/api/admin/locations/${editing.id}`, "PUT", { name: editing.name }, (x) => x.renamed ? "Renamed everywhere it is used." : "No change.");
+    const r = await call(`/api/admin/locations/${editing.id}`, "PUT", { name: editing.name, deliveryEnabled: editing.deliveryEnabled, deliveryFee: editing.deliveryFee, freeAbove: editing.freeAbove, minOrder: editing.minOrder }, (x) => x.renamed ? "Renamed everywhere it is used. Delivery rules saved." : "Saved.");
     if (r) setEditing(null);
   };
   const toggle = (c) => call(`/api/admin/locations/${c._id}`, "PUT", { isActive: !c.isActive }, c.isActive ? `"${c.name}" is now hidden from new shops, partners and addresses.` : `"${c.name}" is visible again.`);
@@ -54,17 +62,25 @@ export function LocationsAdmin({ token, tell }) {
             <button disabled={busy || i === rows.length - 1} onClick={() => move(i, 1)} className="rounded p-0.5 text-slate-400 hover:text-slate-900 disabled:opacity-25" aria-label={`Move ${c.name} down`}><ArrowDown size={15}/></button>
           </div>
           <div className="min-w-0 flex-1"><p className={cx("truncate font-bold", !c.isActive && "text-slate-400 line-through")}>{c.name}</p>
-            <p className="text-xs text-slate-500">{c.shops} shop{c.shops === 1 ? "" : "s"} · {c.drivers} delivery partner{c.drivers === 1 ? "" : "s"} · {c.addresses} saved address{c.addresses === 1 ? "" : "es"}</p></div>
+            <p className="text-xs text-slate-500">{c.shops} shop{c.shops === 1 ? "" : "s"} · {c.drivers} delivery partner{c.drivers === 1 ? "" : "s"} · {c.addresses} saved address{c.addresses === 1 ? "" : "es"}</p>
+            <p className="text-xs text-slate-500">{deliveryText(c)}</p></div>
           {!c.isActive && <Pill tone="gray">Hidden</Pill>}
           <div className="flex items-center gap-1">
-            <button disabled={busy} onClick={() => setEditing({ id: c._id, name: c.name })} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" title="Rename"><Edit3 size={15}/></button>
+            <button disabled={busy} onClick={() => setEditing({ id: c._id, name: c.name, deliveryEnabled: c.deliveryEnabled !== false, deliveryFee: c.deliveryFee ?? "", freeAbove: c.freeAbove ?? "", minOrder: c.minOrder ?? "" })} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" title="Edit"><Edit3 size={15}/></button>
             <button disabled={busy} onClick={() => toggle(c)} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" title={c.isActive ? "Hide" : "Show"}>{c.isActive ? <EyeOff size={15}/> : <Eye size={15}/>}</button>
             <button disabled={busy} onClick={() => setRemoving(c)} className="rounded-lg border border-red-100 p-2 text-red-600 hover:bg-red-50" title="Delete"><Trash2 size={15}/></button>
           </div>
         </li>)}
       </ul></div>}
-    {editing && <Modal title="Rename location" subtitle="Shops, partners, addresses, ads and open orders using it are updated too." close={() => setEditing(null)}>
+    {editing && <Modal title="Edit location" subtitle="Renaming updates shops, partners, addresses, ads and open orders using it. Delivery rules apply to the whole checkout: one fee, however many shops." close={() => setEditing(null)}>
       <form onSubmit={rename} className="space-y-4"><Field label="Name"><input autoFocus className="input w-full" value={editing.name} maxLength={40} onChange={(e) => setEditing({ ...editing, name: e.target.value })}/></Field>
+        <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={editing.deliveryEnabled} onChange={(e) => setEditing({ ...editing, deliveryEnabled: e.target.checked })}/> We deliver here (untick to pause deliveries; checkout will refuse)</label>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Delivery fee (₹)"><input className="input w-full" inputMode="decimal" placeholder="default" value={editing.deliveryFee} onChange={(e) => setEditing({ ...editing, deliveryFee: e.target.value })} aria-label="Delivery fee"/></Field>
+          <Field label="Free above (₹)"><input className="input w-full" inputMode="decimal" placeholder="default" value={editing.freeAbove} onChange={(e) => setEditing({ ...editing, freeAbove: e.target.value })} aria-label="Free delivery above"/></Field>
+          <Field label="Minimum order (₹)"><input className="input w-full" inputMode="decimal" placeholder="none" value={editing.minOrder} onChange={(e) => setEditing({ ...editing, minOrder: e.target.value })} aria-label="Minimum order"/></Field>
+        </div>
+        <p className="text-xs text-slate-500">Leave a box empty to use the platform default from Settings. Free above 0 turns the free-delivery offer off for this location. Fee 0 means free delivery here.</p>
         <button disabled={busy || !editing.name.trim()} className="btn-primary w-full"><Check size={16}/> Save</button></form></Modal>}
     {removing && <DeleteLocation cat={removing} others={rows.filter((r) => r._id !== removing._id)} busy={busy} close={() => setRemoving(null)}
       onDelete={async (to) => { const r = await call(`/api/admin/locations/${removing._id}${to ? `?moveTo=${encodeURIComponent(to)}` : ""}`, "DELETE", undefined, (x) => x.movedTo ? `Deleted. Everything moved to "${x.movedTo}".` : "Deleted."); if (r) setRemoving(null); }}/>}

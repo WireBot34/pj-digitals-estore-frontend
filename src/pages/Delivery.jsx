@@ -12,6 +12,7 @@ const TABS = [["active", "Active jobs"], ["history", "History"], ["earnings", "E
 const jobTone = (s) => ({ assigned: "amber", accepted: "blue", picked_up: "blue", on_the_way: "blue", delivered: "green" })[s] || "red";
 const when = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "");
 const dropLine = (d = {}) => [d.fullName, d.street, d.landmark, d.location || d.city, d.state, d.zipCode].filter(Boolean).join(", ");
+const pinned = (d) => d && Number.isFinite(Number(d.latitude)) && Number.isFinite(Number(d.longitude)) && d.latitude !== null && d.longitude !== null;
 const mapLink = (text) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(text)}`;
 
 // what the backend lets a driver do from each state: [next status, button label, needs a reason?]
@@ -87,6 +88,7 @@ function JobCard({ job, onAction, busy }) {
   const o = job.order || {};
   const pickup = [job.pickup?.address, job.pickup?.location].filter(Boolean).join(", ");
   const drop = dropLine(job.drop);
+  const dropDest = pinned(job.drop) ? `${job.drop.latitude},${job.drop.longitude}` : drop; // the customer's pin is exact; the text is the fallback
   const actions = ACTIONS[job.status] || [];
   return <article className="rounded-2xl border border-slate-200 bg-white p-5">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-extrabold">{o.orderNumber || "Order"}</p><p className="text-xs text-slate-500">Assigned {when(job.assignedAt)}</p></div><Pill tone={jobTone(job.status)}>{prettify(job.status)}</Pill></div>
@@ -94,7 +96,7 @@ function JobCard({ job, onAction, busy }) {
       <div className="rounded-xl bg-slate-50 p-4"><p className="label">1 · Pick up from</p><p className="mt-1 font-bold">{job.pickup?.name || "Shop"}</p><p className="text-slate-600">{pickup || "Address not provided"}</p>
         <div className="mt-3 flex flex-wrap gap-2">{job.pickup?.phone && <a className="btn-secondary px-3 py-2 text-xs" href={`tel:${job.pickup.phone}`}><Phone size={14}/> {job.pickup.phone}</a>}{pickup && <a className="btn-secondary px-3 py-2 text-xs" target="_blank" rel="noreferrer" href={mapLink(pickup)}><Navigation size={14}/> Directions</a>}</div></div>
       <div className="rounded-xl bg-slate-50 p-4"><p className="label">2 · Deliver to</p><p className="mt-1 font-bold">{job.drop?.fullName || "Customer"}</p><p className="text-slate-600">{drop || "Address not provided"}</p>
-        <div className="mt-3 flex flex-wrap gap-2">{job.drop?.phone && <a className="btn-secondary px-3 py-2 text-xs" href={`tel:${job.drop.phone}`}><Phone size={14}/> {job.drop.phone}</a>}{drop && <a className="btn-secondary px-3 py-2 text-xs" target="_blank" rel="noreferrer" href={mapLink(drop)}><MapPin size={14}/> Directions</a>}</div></div>
+        <div className="mt-3 flex flex-wrap gap-2">{job.drop?.phone && <a className="btn-secondary px-3 py-2 text-xs" href={`tel:${job.drop.phone}`}><Phone size={14}/> {job.drop.phone}</a>}{drop && <a className="btn-secondary px-3 py-2 text-xs" target="_blank" rel="noreferrer" href={mapLink(dropDest)}><MapPin size={14}/> Directions</a>}</div></div>
     </div>
     {["assigned", "accepted", "picked_up", "on_the_way"].includes(job.status) && <>
       <button onClick={() => setShowMap((v) => !v)} className="btn-secondary mt-4 px-3 py-2 text-xs"><MapIcon size={14}/> {showMap ? "Hide map" : "Show map & route"}</button>

@@ -17,7 +17,10 @@ const newAttemptKey = () => (globalThis.crypto?.randomUUID?.() || `${Date.now().
 
 const imagesOf = (images) => (Array.isArray(images) ? images.map((i) => (typeof i === "string" ? i : i?.url || i?.secure_url || "")).filter(Boolean) : []);
 const discountOf = (p) => (p.comparePrice > p.price ? Math.round((1 - p.price / p.comparePrice) * 100) : 0);
-const mapsLink = (a) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([a.street, a.location, a.city, a.state, a.zipCode].filter(Boolean).join(", "))}`;
+const hasPin = (a) => a && a.latitude !== "" && a.longitude !== "" && a.latitude != null && a.longitude != null && Number.isFinite(Number(a.latitude)) && Number.isFinite(Number(a.longitude));
+const mapsLink = (a) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hasPin(a) ? `${a.latitude},${a.longitude}` : [a.street, a.location, a.city, a.state, a.zipCode].filter(Boolean).join(", "))}`;
+/** The map pin of an address form as API fields: both numbers, or null to clear it. */
+const pinFields = (f) => (hasPin(f) ? { latitude: Number(f.latitude), longitude: Number(f.longitude) } : { latitude: null, longitude: null });
 const chip = (active) => cx("shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium transition", active ? "border-ink bg-ink text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-900");
 const shopName = (o) => (o.shop && typeof o.shop === "object" ? o.shop.name : "");
 
@@ -705,22 +708,19 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
                     {g.shop && g.shop.isOpen === false && <span className="text-xs font-semibold text-red-700">Closed right now</span>}
                   </div>
                   <ul className="divide-y divide-slate-200 border-y border-slate-200">{g.items.map((it, i) => <CartLine key={`${it.product?._id || i}-${it.size}`} it={it} update={update} remove={remove}/>)}</ul>
-                  {g.quote && <div className="mt-2 text-sm">
-                    <p className="flex justify-between text-slate-600"><span>Delivery from {g.shop?.name || "this shop"}</span><span className="price font-medium">{feeText(g.quote.shippingCost)}</span></p>
-                    {g.quote.addForFreeDelivery != null && <p className="mt-1 text-xs font-medium text-brand-700">Add {money(g.quote.addForFreeDelivery)} more from this shop for free delivery</p>}
-                  </div>}
                 </section>)}
               </div>
               <aside className="h-fit rounded-xl border border-slate-200 bg-white p-5 lg:sticky lg:top-24">
                 <h2 className="font-semibold">Order summary</h2>
                 <dl className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
-                  <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.summary.orders > 1 ? ` (${quote.summary.orders} shops)` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added when you order</span>}</dd></div>
+                  <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.delivery?.location ? ` to ${quote.delivery.location}` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added when you order</span>}</dd></div>
                   {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
                 </dl>
                 <div className="my-4 border-t border-slate-200"/>
                 <div className="flex justify-between font-semibold"><span>{quote ? "Total" : "Total so far"}</span><span className="price">{money(quote ? quote.summary.totalAmount : cart.totalAmount)}</span></div>
-                {quote && quote.summary.orders > 1 && <p className="mt-2 text-xs text-slate-500">Each shop delivers its own order, so each has its own delivery fee.</p>}
+                {quote?.delivery?.addForFree != null && <p className="mt-2 text-xs font-medium text-brand-700">Add {money(quote.delivery.addForFree)} more for free delivery</p>}
+                {quote && quote.summary.orders > 1 && <p className="mt-2 text-xs text-slate-500">One delivery fee covers items from all {quote.summary.orders} shops.</p>}
                 {meta.cashOnDelivery && <p className="mt-3 text-xs text-slate-500">Pay on delivery is available.</p>}
                 {blocked && <p className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-800"><b>{blocked.name}</b> {blocked.message}. Update your cart to continue.</p>}
                 {blocked ? <button disabled className="btn-primary mt-5 w-full">Checkout <ArrowRight size={17}/></button> : <Link to="/checkout" className="btn-primary mt-5 w-full">Checkout <ArrowRight size={17}/></Link>}
@@ -730,7 +730,7 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
 }
 
 /* -------------------------------------------------------------- Checkout */
-const blankAddress = { fullName: "", phone: "", street: "", city: "", state: "", zipCode: "", country: "India", location: "", landmark: "" };
+const blankAddress = { fullName: "", phone: "", street: "", city: "", state: "", zipCode: "", country: "India", location: "", landmark: "", latitude: "", longitude: "" };
 const ADDRESS_FIELDS = ["fullName", "phone", "street", "city", "state", "zipCode", "country", "location", "landmark"];
 
 /** "+91 98765 43210", "098765 43210" and "9876543210" all become 9876543210. */
@@ -754,6 +754,27 @@ export function validateAddress(f) {
   return e;
 }
 
+/** Optional map pin: the phone's own location, so the delivery partner can open the exact spot in Maps. */
+function PinField({ form, setForm }) {
+  const [state, setState] = useState("");
+  const locate = () => {
+    if (!navigator.geolocation) { setState("This phone can't share its location."); return; }
+    setState("Finding you...");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setForm({ ...form, latitude: Number(pos.coords.latitude.toFixed(6)), longitude: Number(pos.coords.longitude.toFixed(6)) }); setState(""); },
+      (err) => setState(err.code === 1 ? "Location permission is off. You can still order without a pin." : "Could not get your location. You can still order without a pin."),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+  };
+  return <div className="sm:col-span-2 rounded-lg bg-slate-50 p-3 text-sm">
+    <p className="font-medium">Map pin <span className="font-normal text-slate-500">(optional, helps the delivery partner find you)</span></p>
+    {hasPin(form)
+      ? <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-green-700">Pin saved</span><a className="underline" href={mapsLink(form)} target="_blank" rel="noreferrer">Check in Maps</a><button type="button" className="underline" onClick={() => setForm({ ...form, latitude: "", longitude: "" })}>Remove pin</button></p>
+      : <button type="button" onClick={locate} className="btn-secondary mt-2 px-3 py-1.5 text-xs"><MapPin size={14}/> Use my current location</button>}
+    {state && <p className="mt-1 text-xs text-slate-600" role="status">{state}</p>}
+  </div>;
+}
+
 export function AddressFields({ form, setForm, locations, errors = {} }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const bad = (k) => ({ "aria-invalid": errors[k] ? "true" : undefined, "aria-describedby": errors[k] ? `err-${k}` : undefined });
@@ -769,6 +790,7 @@ export function AddressFields({ form, setForm, locations, errors = {} }) {
     <div><label className="label" htmlFor="a-state">State</label><input id="a-state" className={cls("state")} value={form.state} onChange={set("state")} {...bad("state")}/><Err k="state"/></div>
     <div><label className="label" htmlFor="a-pin">PIN code</label><input id="a-pin" className={cls("zipCode")} inputMode="numeric" autoComplete="postal-code" maxLength={6} value={form.zipCode} onChange={(e) => setForm({ ...form, zipCode: e.target.value.replace(/\D/g, "") })} {...bad("zipCode")}/><Err k="zipCode"/></div>
     <div><label className="label" htmlFor="a-country">Country</label><input id="a-country" className={cls("country")} value={form.country} onChange={set("country")} {...bad("country")}/><Err k="country"/></div>
+    <PinField form={form} setForm={setForm}/>
   </div>;
 }
 
@@ -808,6 +830,15 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); }
   }, [signedIn, token, tell]);
   useEffect(() => { load(); }, [load]);
+  // the delivery fee depends on the chosen address's area, so ask the server again when it changes
+  const quoted = useRef("");
+  useEffect(() => {
+    if (!signedIn || loading) return;
+    if (quoted.current === "") { quoted.current = addressId || "-"; return; } // the first quote came with the page
+    if (quoted.current === (addressId || "-")) return;
+    quoted.current = addressId || "-";
+    (async () => { try { const q = await api(`/api/orders/quote${addressId ? `?addressId=${encodeURIComponent(addressId)}` : ""}`, { token: await token() }); setQuote(q?.data || null); } catch { /* keep the last quote; the server re-checks when the order is placed */ } })();
+  }, [addressId, signedIn, loading, token]);
 
   // fill in what the account already knows
   useEffect(() => {
@@ -837,7 +868,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
       if (addressId) {
         body.addressId = addressId;
       } else {
-        const address = { ...Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, form[k]])), phone: normalizePhone(form.phone) };
+        const address = { ...Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, form[k]])), ...(hasPin(form) ? pinFields(form) : {}), phone: normalizePhone(form.phone) };
         if (saveAddress) {
           const saved = await api("/api/address", { token: t, method: "POST", body: { ...address, isDefault: !addresses.length } });
           body.addressId = saved.data._id;
@@ -913,18 +944,17 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
         {quote ? <div className="mt-4 space-y-4">{quote.groups.map((g) => <div key={g.shop?._id || "platform"}>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.shop?.name || BUSINESS.name}</p>
           <ul className="mt-1.5 space-y-1.5">{g.items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.name} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>
-          <p className="mt-1.5 flex justify-between text-xs text-slate-500"><span>Delivery</span><span>{feeText(g.shippingCost)}</span></p>
         </div>)}</div>
         : <ul className="mt-4 space-y-2.5">{items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.product?.name || "Product"} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>}
         <div className="my-4 border-t border-slate-200"/>
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
-          <div className="flex justify-between"><dt className="text-slate-600">Delivery</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added on your order slip</span>}</dd></div>
+          <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.delivery?.location ? ` to ${quote.delivery.location}` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added on your order slip</span>}</dd></div>
           {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
           <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><dt>{payment === "cod" ? "Pay in cash" : "Total"}</dt><dd className="price">{money(total)}</dd></div>
           <div className="flex justify-between"><dt className="text-slate-600">Pay by</dt><dd className="font-medium">{payment === "cod" ? "Cash on delivery" : "Online"}</dd></div>
         </dl>
-        <p className="mt-3 text-xs leading-5 text-slate-500">Items from different shops are delivered as separate orders, each with its own delivery fee. {gst ? "" : "No GST is added; prices are final."}</p>
+        <p className="mt-3 text-xs leading-5 text-slate-500">{quote?.delivery?.addForFree != null && <b className="block text-brand-700">Add {money(quote.delivery.addForFree)} more for free delivery. </b>}Items from different shops arrive as separate orders, with one delivery fee for all. {gst ? "" : "No GST is added; prices are final."}</p>
         {unavailable && <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-800">{quote?.issues?.length ? <ul className="space-y-1">{quote.issues.map((x, i) => <li key={i}><b>{x.name}</b> {x.message}.</li>)}</ul> : "An item in your cart is no longer available."} <Link to="/cart" className="underline">Update your cart</Link></div>}
         <button disabled={busy || noPayment || unavailable} className="btn-primary mt-5 w-full">{busy ? "Please wait..." : payment === "online" ? "Place order and pay" : "Place order"}</button>
         <p className="mt-3 text-center text-xs text-slate-500">By placing your order you agree to our <Link to="/legal/terms" className="underline">terms</Link> and <Link to="/legal/refunds" className="underline">returns policy</Link>.</p>
@@ -1142,7 +1172,7 @@ export function Account({ token, signedIn, user, role, tell }) {
   useEffect(() => { load(); }, [load]);
 
   const startNew = () => { setForm({ ...blankAddress, type: "Home", isDefault: !addresses.length, fullName: user?.fullName || "", phone: normalizePhone(user?.primaryPhoneNumber?.phoneNumber) }); setErrors({}); setEditing("new"); };
-  const startEdit = (a) => { setForm({ ...blankAddress, ...Object.fromEntries(Object.entries(a).filter(([, v]) => typeof v === "string" || typeof v === "boolean")), type: a.type || "Home" }); setErrors({}); setEditing(a); };
+  const startEdit = (a) => { setForm({ ...blankAddress, ...Object.fromEntries(Object.entries(a).filter(([k, v]) => typeof v === "string" || typeof v === "boolean" || ((k === "latitude" || k === "longitude") && typeof v === "number"))), type: a.type || "Home" }); setErrors({}); setEditing(a); };
   const submit = async (e) => {
     e.preventDefault();
     const found = validateAddress(form);
@@ -1151,7 +1181,7 @@ export function Account({ token, signedIn, user, role, tell }) {
     setLoading(true);
     try {
       const t = await token();
-      const body = { ...Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, form[k]])), phone: normalizePhone(form.phone), type: form.type, isDefault: !!form.isDefault };
+      const body = { ...Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, form[k]])), ...pinFields(form), phone: normalizePhone(form.phone), type: form.type, isDefault: !!form.isDefault };
       if (editing === "new") await api("/api/address", { token: t, method: "POST", body });
       else await api(`/api/address/${editing._id}`, { token: t, method: "PUT", body });
       setEditing(null); await load(); tell("Address saved.");
