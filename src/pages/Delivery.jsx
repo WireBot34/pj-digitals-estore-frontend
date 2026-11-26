@@ -125,8 +125,14 @@ function ActiveJobs({ token, tell, refreshMe, available }) {
       note = window.prompt(status === "rejected" ? "Why are you rejecting this job?" : "What went wrong with the delivery?");
       if (!note || !note.trim()) return;
     }
+    let otp;
+    if (status === "delivered" && job.otpRequired) {
+      if (job.otpLocked) { tell("Too many wrong codes. Call the shop or admin to complete this delivery.", "error"); return; }
+      otp = window.prompt("Ask the customer for their 4-digit delivery code and type it here:");
+      if (!otp || !otp.trim()) return;
+    }
     setBusyId(job._id);
-    try { await api(`/api/delivery/jobs/${job._id}/status`, { token: await token(), method: "PUT", body: { status, note } }); tell(status === "delivered" ? "Delivery completed. Great work!" : "Job updated."); await load(); if (status === "delivered") await refreshMe(); }
+    try { await api(`/api/delivery/jobs/${job._id}/status`, { token: await token(), method: "PUT", body: { status, note, otp } }); tell(status === "delivered" ? "Delivery completed. Great work!" : "Job updated."); await load(); if (status === "delivered") await refreshMe(); }
     catch (e) { tell(e.message, "error"); } finally { setBusyId(""); }
   };
 
