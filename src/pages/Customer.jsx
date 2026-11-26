@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { SignInButton, useClerk } from "@clerk/clerk-react";
-import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp, ShieldCheck } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { useBrand, useBusiness } from "../brand";
 import { getCoupon, quotePath, setCoupon } from "../coupon.core";
@@ -107,6 +107,7 @@ export function ProductCard({ p }) {
         : <div className="grid h-full place-items-center text-slate-400"><Package size={32} strokeWidth={1.25}/></div>}
       {off > 0 && !out && <span className="absolute left-2 top-2 rounded bg-ink px-1.5 py-0.5 text-[11px] font-semibold text-white">{off}% off</span>}
       {out && <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">Sold out</span>}
+      {p.isAssured && <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 shadow-sm"><ShieldCheck size={12}/> Assured</span>}
     </div>
     <div className="mt-2.5">
       <h3 className="line-clamp-2 text-sm font-medium leading-snug text-slate-900 sm:text-[15px]">{p.name}</h3>
@@ -159,8 +160,9 @@ function FilterSheet({ open, close, values, apply, areas, hideArea }) {
         <div><span className="label">Price (₹)</span>
           <div className="mt-1 flex items-center gap-2"><input aria-label="Minimum price" className="input w-full" inputMode="numeric" placeholder="Min" value={v.minPrice} onChange={(e) => setV({ ...v, minPrice: e.target.value.replace(/\D/g, "") })}/><span className="text-slate-400">to</span><input aria-label="Maximum price" className="input w-full" inputMode="numeric" placeholder="Max" value={v.maxPrice} onChange={(e) => setV({ ...v, maxPrice: e.target.value.replace(/\D/g, "") })}/></div></div>
         <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={v.inStock === "true"} onChange={(e) => setV({ ...v, inStock: e.target.checked ? "true" : "" })}/> Show only items in stock</label>
+        <label className="mt-3 flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={v.assured === "true"} onChange={(e) => setV({ ...v, assured: e.target.checked ? "true" : "" })}/> Assured products only</label>
       </div>
-      <div className="mt-6 flex gap-3"><button onClick={() => apply({ sort: "newest", location: "", minPrice: "", maxPrice: "", inStock: "" })} className="btn-secondary flex-1">Reset</button><button onClick={() => apply(v)} className="btn-primary flex-1">Show results</button></div>
+      <div className="mt-6 flex gap-3"><button onClick={() => apply({ sort: "newest", location: "", minPrice: "", maxPrice: "", inStock: "", assured: "" })} className="btn-secondary flex-1">Reset</button><button onClick={() => apply(v)} className="btn-primary flex-1">Show results</button></div>
     </div>
   </div>;
 }
@@ -175,6 +177,7 @@ export function Shop({ tell }) {
   const minPrice = sp.get("minPrice") || "";
   const maxPrice = sp.get("maxPrice") || "";
   const inStock = sp.get("inStock") || "";
+  const assured = sp.get("assured") || "";
   const page = Number(sp.get("page")) || 1;
   const [search, setSearch] = useState(sp.get("search") || "");
   const [focused, setFocused] = useState(false);
@@ -213,7 +216,7 @@ export function Shop({ tell }) {
   useEffect(() => {
     let live = true;
     setLoading(true); setFailed(false);
-    api("/api/products" + qs({ page, limit: 12, search: sp.get("search"), category, sort, location, shop, minPrice, maxPrice, inStock }))
+    api("/api/products" + qs({ page, limit: 12, search: sp.get("search"), category, sort, location, shop, minPrice, maxPrice, inStock, assured }))
       .then((r) => { if (live) { setProducts(r.data || []); setPagination(r.pagination); } })
       .catch((e) => { if (live) { setFailed(true); tell(e.message, "error"); } })
       .finally(() => live && setLoading(false));
@@ -226,13 +229,14 @@ export function Shop({ tell }) {
     location && !shop && { key: "location", label: location },
     (minPrice || maxPrice) && { key: "price", label: `₹${minPrice || 0} to ${maxPrice ? "₹" + maxPrice : "any"}` },
     inStock && { key: "inStock", label: "In stock" },
+    assured && { key: "assured", label: "Assured" },
     sp.get("search") && { key: "search", label: `"${sp.get("search")}"` },
   ].filter(Boolean);
   const remove = (key) => {
     if (key === "price") setParams({ minPrice: "", maxPrice: "" });
     else { if (key === "search") setSearch(""); setParam(key, ""); }
   };
-  const filterCount = [location && !shop, minPrice || maxPrice, inStock, sort !== "newest"].filter(Boolean).length;
+  const filterCount = [location && !shop, minPrice || maxPrice, inStock, assured, sort !== "newest"].filter(Boolean).length;
   const clearAll = () => { setSearch(""); setSp(shop ? { shop } : {}, { replace: true }); };
 
   return <Page>
@@ -271,7 +275,7 @@ export function Shop({ tell }) {
       </div>
     </div>
 
-    <FilterSheet open={sheet} close={() => setSheet(false)} hideArea={Boolean(shop)} areas={meta.locations} values={{ sort, location, minPrice, maxPrice, inStock }} apply={(v) => { setParams({ sort: v.sort === "newest" ? "" : v.sort, location: v.location, minPrice: v.minPrice, maxPrice: v.maxPrice, inStock: v.inStock }); setSheet(false); }}/>
+    <FilterSheet open={sheet} close={() => setSheet(false)} hideArea={Boolean(shop)} areas={meta.locations} values={{ sort, location, minPrice, maxPrice, inStock, assured }} apply={(v) => { setParams({ sort: v.sort === "newest" ? "" : v.sort, location: v.location, minPrice: v.minPrice, maxPrice: v.maxPrice, inStock: v.inStock, assured: v.assured }); setSheet(false); }}/>
 
     {(activeFilters.length > 0 || shop) && <div className="mt-4 flex flex-wrap items-center gap-2">
       {shop && <button onClick={() => setParam("shop", "")} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold">Showing one shop <X size={13}/></button>}
@@ -538,6 +542,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
       <div>
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl">{p.name}</h1>
+          {p.isAssured && <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-800"><ShieldCheck size={14}/> Assured: checked and vouched for by us</p>}
           <button onClick={share} aria-label="Share this product" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50"><Share2 size={18}/></button>
         </div>
         {(p.brand || p.unit) && <p className="mt-1 text-sm text-slate-500">{[p.brand, p.unit].filter(Boolean).join(" · ")}</p>}

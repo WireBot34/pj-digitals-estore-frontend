@@ -139,7 +139,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 export function ProductModal({ product, token, close, save, tell, owner = false, onOpenExisting, initialBarcode = "" }) {
   const meta = useMeta();
-  const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isActive: product?.isActive !== false, shop: product?.shop?._id || product?.shop || "", barcode: product?.barcode || initialBarcode, sku: product?.sku || "", brand: product?.brand || "", unit: product?.unit || "", costPrice: product?.costPrice ?? "" });
+  const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isAssured: !!product?.isAssured, isActive: product?.isActive !== false, shop: product?.shop?._id || product?.shop || "", barcode: product?.barcode || initialBarcode, sku: product?.sku || "", brand: product?.brand || "", unit: product?.unit || "", costPrice: product?.costPrice ?? "" });
   const [found, setFound] = useState(null); // result of the barcode lookup: { inShop, catalog }
   const [scanning, setScanning] = useState(false);
   const [catalogImage, setCatalogImage] = useState(""); // picture borrowed from the shared catalogue
@@ -185,7 +185,7 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
     if (!existing.length && !files.length && !catalogImage) { tell("Add at least one product image.", "error"); return; }
     setSaving(true);
     const fd = new FormData();
-    ["name", "description", "price", "stock", "category", ...(owner ? [] : ["isFeatured"]), "isActive"].forEach((k) => fd.append(k, String(form[k])));
+    ["name", "description", "price", "stock", "category", ...(owner ? [] : ["isFeatured", "isAssured"]), "isActive"].forEach((k) => fd.append(k, String(form[k])));
     if (form.comparePrice !== "") fd.append("comparePrice", String(form.comparePrice));
     ["barcode", "sku", "brand", "unit"].forEach((k) => fd.append(k, form[k].trim())); // empty = clear it
     if (owner) fd.append("costPrice", String(form.costPrice).trim());
@@ -224,6 +224,7 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
         {catalogImage && !files.length && <div className="mt-2 flex items-center gap-3 rounded-xl bg-emerald-50 p-2 text-sm text-emerald-900"><img src={sized(catalogImage, "sm")} alt="" className="h-14 w-14 rounded-lg object-cover"/><span className="flex-1">Using the catalogue photo. Upload your own below if you prefer.</span><button type="button" onClick={() => setCatalogImage("")} className="font-bold underline">Remove</button></div>}
         <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{files.length ? `${files.length} new file(s) selected` : "Choose images (JPG, PNG, WEBP, AVIF · max 12 MB each)"}<input className="hidden" type="file" accept={IMAGE_TYPES.join(",")} multiple onChange={pickFiles}/></label></div>
       {!owner && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={change}/> Featured product</label>}
+      {!owner && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isAssured" checked={form.isAssured} onChange={change}/> Assured (you vouch for this product; shows a badge)</label>}
       <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isActive" checked={form.isActive} onChange={change}/> Active</label>
     </div>
     <div className="mt-7 flex justify-end gap-3"><button type="button" onClick={close} className="btn-secondary">Cancel</button><button disabled={saving} className="btn-primary">{saving ? "Saving..." : product ? "Save changes" : "Create product"}</button></div></form>{scanning && <ScanModal onCode={onScanned} onClose={() => setScanning(false)}/>}</div>;
