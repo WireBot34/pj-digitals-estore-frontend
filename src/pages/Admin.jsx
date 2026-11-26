@@ -166,6 +166,10 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
         const c = r.catalog;
         setForm((f) => ({ ...f, barcode: code, name: f.name || c.name || "", description: f.description || c.description || "", brand: f.brand || c.brand || "", unit: f.unit || c.unit || "", comparePrice: f.comparePrice === "" && c.mrp != null ? c.mrp : f.comparePrice, category: f.category === "Other" && c.category ? c.category : f.category }));
         if (c.image && !existing.length && !files.length) setCatalogImage(c.image);
+      } else if (!product && r.online && !r.catalog && !r.inShop) {
+        // a suggestion from the internet: fills only what is still empty; the shop checks it
+        const o = r.online;
+        setForm((f) => ({ ...f, barcode: code, name: f.name || o.name || "", brand: f.brand || o.brand || "", unit: f.unit || o.unit || "" }));
       }
     } catch (e) { setFound(null); if (e.status !== 400) tell(e.message, "error"); }
   };
@@ -206,7 +210,8 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
           {canScan() && <button type="button" onClick={() => setScanning(true)} className="btn-secondary shrink-0 px-3" aria-label="Scan with camera"><ScanLine size={18}/></button>}</div>
         {found?.inShop && found.inShop._id !== product?._id && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">You already sell this: <b>{found.inShop.name}</b> ({found.inShop.stock} in stock). {onOpenExisting ? <button type="button" onClick={() => onOpenExisting(found.inShop)} className="font-bold underline">Open it instead</button> : "Edit that product instead of adding it twice."}</p>}
         {!product && found?.catalog && !found.inShop && <p className="mt-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">Found in the shared catalogue. Name, brand, category and MRP are filled in; check them and set your own price.</p>}
-        {!product && found && !found.catalog && !found.inShop && <p className="mt-2 text-xs text-slate-500">New barcode. Fill in the details once and it will be remembered for other shops.</p>}</div>
+        {!product && found?.online && !found.catalog && !found.inShop && <p className="mt-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">Found online ({found.online.source}). Name, brand and size are filled in. Please check them, add a photo and set your price.</p>}
+        {!product && found && !found.catalog && !found.inShop && !found.online && <p className="mt-2 text-xs text-slate-500">New barcode. Fill in the details once and it will be remembered for other shops.</p>}</div>
       <div className="sm:col-span-2"><label className="label">Product name</label><input className="input w-full" name="name" required value={form.name} onChange={change}/></div>
       <div className="sm:col-span-2"><label className="label">Description</label><textarea className="input w-full" rows="3" name="description" required value={form.description} onChange={change}/></div>
       <div><label className="label">Store price (₹) <span className="font-normal text-slate-400">— what customers pay</span></label><input className="input w-full" type="number" min="0" step="0.01" name="price" required value={form.price} onChange={change}/></div>
