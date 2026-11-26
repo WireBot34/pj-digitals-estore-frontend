@@ -4,6 +4,7 @@ import { SignInButton, useClerk } from "@clerk/clerk-react";
 import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { useBrand, useBusiness } from "../brand";
+import { getCoupon, quotePath, setCoupon } from "../coupon.core";
 import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
 import { AdHero, AdStrip } from "../ads";
@@ -677,7 +678,7 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const t = await token(); const [r, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/orders/quote", { token: t }).catch(() => null)]); setCart(r.cart || r.data); setQuote(q?.data || null); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
+  const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const t = await token(); const [r, q] = await Promise.all([api("/api/cart", { token: t }), api(quotePath({ coupon: getCoupon() }), { token: t }).catch(() => null)]); setCart(r.cart || r.data); setQuote(q?.data || null); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
   useEffect(() => { load(); }, [load]);
   const idOf = (item) => item.product?._id || item.product;
   const update = async (item, quantity) => { try { await api(`/api/cart/item/${idOf(item)}`, { token: await token(), method: "PUT", body: { quantity, size: item.size } }); await load(); await refreshCartCount(); } catch (e) { tell(e.message, "error"); } };
@@ -712,9 +713,11 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
               </div>
               <aside className="h-fit rounded-xl border border-slate-200 bg-white p-5 lg:sticky lg:top-24">
                 <h2 className="font-semibold">Order summary</h2>
+                <CouponBox quote={quote} onChange={load}/>
                 <dl className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
                   <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.delivery?.location ? ` to ${quote.delivery.location}` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added when you order</span>}</dd></div>
+                  {quote?.summary.discount > 0 && <div className="flex justify-between text-green-700"><dt>Coupon {quote.coupon?.code}</dt><dd className="price font-medium">−{money(quote.summary.discount)}</dd></div>}
                   {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
                 </dl>
                 <div className="my-4 border-t border-slate-200"/>
@@ -821,7 +824,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     setFailed(false);
     try {
       const t = await token();
-      const [c, a, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/address", { token: t }), api("/api/orders/quote", { token: t }).catch(() => null)]);
+      const [c, a, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/address", { token: t }), api(quotePath({ coupon: getCoupon() }), { token: t }).catch(() => null)]);
       setCart(c.cart || c.data);
       setQuote(q?.data || null);
       const list = Array.isArray(a.data) ? a.data : [];
@@ -837,8 +840,10 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     if (quoted.current === "") { quoted.current = addressId || "-"; return; } // the first quote came with the page
     if (quoted.current === (addressId || "-")) return;
     quoted.current = addressId || "-";
-    (async () => { try { const q = await api(`/api/orders/quote${addressId ? `?addressId=${encodeURIComponent(addressId)}` : ""}`, { token: await token() }); setQuote(q?.data || null); } catch { /* keep the last quote; the server re-checks when the order is placed */ } })();
+    (async () => { try { const q = await api(quotePath({ addressId, coupon: getCoupon() }), { token: await token() }); setQuote(q?.data || null); } catch { /* keep the last quote; the server re-checks when the order is placed */ } })();
   }, [addressId, signedIn, loading, token]);
+
+  const reloadQuote = async () => { try { const q = await api(quotePath({ addressId, coupon: getCoupon() }), { token: await token() }); setQuote(q?.data || null); } catch { /* the server re-checks when the order is placed */ } };
 
   // fill in what the account already knows
   useEffect(() => {
@@ -864,7 +869,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     try {
       const t = await token();
       if (!attemptKey.current) attemptKey.current = newAttemptKey();
-      const body = { paymentMethod: payment, notes: notes || undefined, idempotencyKey: attemptKey.current };
+      const body = { paymentMethod: payment, notes: notes || undefined, idempotencyKey: attemptKey.current, couponCode: quote?.coupon?.code || undefined };
       if (addressId) {
         body.addressId = addressId;
       } else {
@@ -879,6 +884,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
 
       const placed = await api("/api/orders", { token: t, method: "POST", body });
       attemptKey.current = null; // placed: the next checkout is a new attempt
+      setCoupon(""); // a coupon is used up with the order
       await refreshCartCount();
 
       let paid = false;
@@ -947,9 +953,11 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
         </div>)}</div>
         : <ul className="mt-4 space-y-2.5">{items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.product?.name || "Product"} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>}
         <div className="my-4 border-t border-slate-200"/>
+        <CouponBox quote={quote} onChange={reloadQuote}/>
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
           <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.delivery?.location ? ` to ${quote.delivery.location}` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added on your order slip</span>}</dd></div>
+          {quote?.summary.discount > 0 && <div className="flex justify-between text-green-700"><dt>Coupon {quote.coupon?.code}</dt><dd className="price font-medium">−{money(quote.summary.discount)}</dd></div>}
           {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
           <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><dt>{payment === "cod" ? "Pay in cash" : "Total"}</dt><dd className="price">{money(total)}</dd></div>
           <div className="flex justify-between"><dt className="text-slate-600">Pay by</dt><dd className="font-medium">{payment === "cod" ? "Cash on delivery" : "Online"}</dd></div>
@@ -961,6 +969,20 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
       </aside>
     </form>
   </Page>;
+}
+
+/* ------------------------------------------------------------ Coupon box */
+/** Enter / remove a coupon code. The server prices it; this only remembers the code and asks for a new quote. */
+function CouponBox({ quote, onChange }) {
+  const [code, setCode] = useState(getCoupon());
+  const applied = quote?.coupon;
+  const apply = (e) => { e.preventDefault(); setCoupon(code); onChange(); };
+  const remove = () => { setCoupon(""); setCode(""); onChange(); };
+  if (applied) return <p className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-green-50 p-2.5 text-sm text-green-800"><span>Coupon <b>{applied.code}</b> applied{applied.description ? ` · ${applied.description}` : ""}</span><button type="button" onClick={remove} className="text-xs font-semibold underline">Remove</button></p>;
+  return <form onSubmit={apply} className="mt-3">
+    <div className="flex gap-2"><input className="input min-w-0 flex-1 uppercase" value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} placeholder="Coupon code" aria-label="Coupon code"/><button className="btn-secondary px-3 py-2 text-sm" disabled={!code.trim()}>Apply</button></div>
+    {quote?.couponError && <p className="mt-1.5 text-xs text-red-700" role="alert">{quote.couponError}</p>}
+  </form>;
 }
 
 /* ------------------------------------------------------------ Order slip */
