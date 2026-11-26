@@ -1140,6 +1140,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
         </li>)}</ul>
         <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4 text-sm"><span className="text-slate-500">{o.shippingCost ? `Includes ${money(o.shippingCost)} delivery` : "Total"}</span><strong className="price text-base">{money(o.totalAmount)}</strong></div>
         {o.paymentMethod === "cod" && !["delivered", "cancelled"].includes(o.orderStatus) && <p className="mt-3 rounded-lg bg-slate-100 p-3 text-xs text-slate-700">Keep <b>{money(o.totalAmount)}</b> in cash ready for the delivery partner.</p>}
+        {o.deliveryCode && <p className="mt-3 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm text-slate-800" data-testid="delivery-code">Delivery code <b className="mx-1 rounded bg-white px-2 py-0.5 font-mono text-lg tracking-widest">{o.deliveryCode}</b> Tell it to the delivery partner when your order arrives. Please do not share it before.</p>}
         {awaitingPayment && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Payment pending. Unpaid online orders are cancelled automatically after a short time.</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           {awaitingPayment && <button disabled={busyId === o._id} onClick={() => payNow(o)} className="btn-primary px-4 py-2">Pay now</button>}
