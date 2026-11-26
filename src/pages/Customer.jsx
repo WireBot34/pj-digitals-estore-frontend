@@ -1122,6 +1122,15 @@ function OrderTrack({ status }) {
   </ol>;
 }
 
+function RefundLine({ refund: r }) {
+  if (!r) return null;
+  const paid = money(r.paidPaise / 100), due = money(r.pendingPaise / 100);
+  const text = r.state === "pending" ? `Refund of ${due} is being processed. We will send it back to you shortly.`
+    : r.state === "paid" ? `Refund of ${paid} was sent to you${r.paidAt ? ` on ${new Date(r.paidAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}${r.reference ? ` (ref ${r.reference})` : ""}.`
+    : `${paid} refunded so far${r.pendingPaise ? `, ${due} more is being processed` : ""}${r.reference ? ` (latest ref ${r.reference})` : ""}.`;
+  return <p className="mt-2 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900" data-testid="refund-line">{text}</p>;
+}
+
 function Tracking({ orderId, token, shop }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -1215,6 +1224,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
           <div className="flex flex-wrap gap-1.5"><Pill tone={payTone(o.paymentStatus)}>{o.paymentMethod === "cod" ? "COD · " : ""}{o.paymentStatus}</Pill><Pill tone={orderTone(o.orderStatus)}>{statusLabel(meta, o.orderStatus)}</Pill></div>
         </div>
         <OrderTrack status={o.orderStatus}/>
+        <RefundLine refund={o.refund}/>
         {o.orderStatus === "cancelled" && (o.cancelledBy || o.cancelReason) && <p className="mt-2 text-xs text-slate-600">Cancelled by {o.cancelledBy === "customer" ? "you" : o.cancelledBy === "shop" ? (shopName(o) || "the shop") : "our team"}{cancelLabel(meta, o) ? <>: <b>{cancelLabel(meta, o)}</b></> : ""}{o.cancelNote ? ` (${o.cancelNote})` : ""}.</p>}
         <ul className="mt-4 space-y-3 border-t border-slate-100 pt-4">{(o.items || []).map((it, i) => <li key={i} className="flex items-center gap-3 text-sm">
           <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-200/60">{(it.image || imageOf(it.product?.images)) && <img src={sized(it.image || imageOf(it.product?.images), "sm")} loading="lazy" className="h-full w-full object-cover" alt=""/>}</div>
