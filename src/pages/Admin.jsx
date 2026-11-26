@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { UserButton } from "@clerk/clerk-react";
-import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Tags, Trash2, Truck, UserCog, Users, X } from "lucide-react";
+import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, MapPin, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Tags, Trash2, Truck, UserCog, Users, X } from "lucide-react";
 import { api, imageOf, money, qs, setActAs, sized } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { useBrand } from "../brand";
@@ -11,6 +11,7 @@ import { DriversAdmin, ShopsAdmin, Users as UsersAdmin } from "./admin/people";
 import { Payouts } from "./admin/money";
 import { Activity, AdsAdmin, AssignDriver, DeliveriesAdmin, SettingsAdmin } from "./admin/ops";
 import { CategoriesAdmin } from "./admin/categories";
+import { LocationsAdmin } from "./admin/locations";
 import { SupportPanel } from "./SupportPanel";
 import { ShopOwnerWorkspace } from "./ShopOwner";
 import { DeliveryWorkspace } from "./Delivery";
@@ -32,7 +33,7 @@ export function AdminShell({ token, user, signOut, tell }) {
   const [mobile, setMobile] = useState(false);
   const meta = useMeta();
   const [acting, setActing] = useState(null); // { kind: "shop" | "driver", entity }
-  const nav = [["overview", "Overview", LayoutDashboard], ["products", "Products", Package], ["categories", "Categories", Tags], ["orders", "Orders", ClipboardList], ["deliveries", "Deliveries", Truck], ["shops", "Shops", Store], ["drivers", "Delivery partners", UserCog], ["users", "Users", Users], ["ads", "Advertisements", Megaphone], ["payouts", "Payouts", Banknote], ["support", "Support", LifeBuoy], ["activity", "Activity log", History], ["settings", "Settings", Settings]];
+  const nav = [["overview", "Overview", LayoutDashboard], ["products", "Products", Package], ["categories", "Categories", Tags], ["locations", "Locations", MapPin], ["orders", "Orders", ClipboardList], ["deliveries", "Deliveries", Truck], ["shops", "Shops", Store], ["drivers", "Delivery partners", UserCog], ["users", "Users", Users], ["ads", "Advertisements", Megaphone], ["payouts", "Payouts", Banknote], ["support", "Support", LifeBuoy], ["activity", "Activity log", History], ["settings", "Settings", Settings]];
   const [tick, setTick] = useState(0); // bump to reload the open section
 
   // "Manage as": the admin runs the real shop / driver workspace, with the backend acting as that account
@@ -67,6 +68,7 @@ export function AdminShell({ token, user, signOut, tell }) {
         {section === "overview" && <Overview key={tick} token={token} tell={tell} setSection={setSection}/>}
         {section === "products" && <Products key={tick} token={token} tell={tell}/>}
         {section === "categories" && <CategoriesAdmin key={tick} token={token} tell={tell}/>}
+        {section === "locations" && <LocationsAdmin key={tick} token={token} tell={tell}/>}
         {section === "orders" && <Orders key={tick} token={token} tell={tell}/>}
         {section === "deliveries" && <DeliveriesAdmin key={tick} token={token} tell={tell} manageDriver={manageDriver}/>}
         {section === "shops" && <ShopsAdmin key={tick} token={token} tell={tell} manage={manageShop}/>}
