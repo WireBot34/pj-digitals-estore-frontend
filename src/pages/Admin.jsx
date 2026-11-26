@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { UserButton } from "@clerk/clerk-react";
-import { ArrowRight, Banknote, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, MapPin, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Tags, Ticket, Trash2, Truck, UserCog, Users, X } from "lucide-react";
+import { ArrowRight, Banknote, BarChart3, ClipboardList, CreditCard, Edit3, History, ImagePlus, LayoutDashboard, ScanLine, LifeBuoy, LogOut, Megaphone, MapPin, Menu, Package, Plus, RefreshCw, Search, Settings, Store, Tags, Ticket, Trash2, Truck, UserCog, Users, X } from "lucide-react";
 import { api, imageOf, money, qs, setActAs, sized } from "../api";
 import { useMeta, statusLabel } from "../meta";
 import { useBrand } from "../brand";
@@ -14,6 +14,7 @@ import { CategoriesAdmin } from "./admin/categories";
 import { LocationsAdmin } from "./admin/locations";
 import { RefundsAdmin } from "./admin/refunds";
 import { CouponsAdmin } from "./admin/coupons";
+import { InsightsAdmin } from "./admin/insights";
 import { SupportPanel } from "./SupportPanel";
 import { ShopOwnerWorkspace } from "./ShopOwner";
 import { DeliveryWorkspace } from "./Delivery";
@@ -35,7 +36,7 @@ export function AdminShell({ token, user, signOut, tell }) {
   const [mobile, setMobile] = useState(false);
   const meta = useMeta();
   const [acting, setActing] = useState(null); // { kind: "shop" | "driver", entity }
-  const nav = [["overview", "Overview", LayoutDashboard], ["products", "Products", Package], ["categories", "Categories", Tags], ["locations", "Locations", MapPin], ["orders", "Orders", ClipboardList], ["deliveries", "Deliveries", Truck], ["shops", "Shops", Store], ["drivers", "Delivery partners", UserCog], ["users", "Users", Users], ["ads", "Advertisements", Megaphone], ["payouts", "Payouts", Banknote], ["refunds", "Refunds", CreditCard], ["coupons", "Coupons", Ticket], ["support", "Support", LifeBuoy], ["activity", "Activity log", History], ["settings", "Settings", Settings]];
+  const nav = [["overview", "Overview", LayoutDashboard], ["products", "Products", Package], ["categories", "Categories", Tags], ["locations", "Locations", MapPin], ["orders", "Orders", ClipboardList], ["deliveries", "Deliveries", Truck], ["shops", "Shops", Store], ["drivers", "Delivery partners", UserCog], ["users", "Users", Users], ["ads", "Advertisements", Megaphone], ["payouts", "Payouts", Banknote], ["refunds", "Refunds", CreditCard], ["coupons", "Coupons", Ticket], ["insights", "Insights", BarChart3], ["support", "Support", LifeBuoy], ["activity", "Activity log", History], ["settings", "Settings", Settings]];
   const [tick, setTick] = useState(0); // bump to reload the open section
 
   // "Manage as": the admin runs the real shop / driver workspace, with the backend acting as that account
@@ -73,6 +74,7 @@ export function AdminShell({ token, user, signOut, tell }) {
         {section === "locations" && <LocationsAdmin key={tick} token={token} tell={tell}/>}
         {section === "refunds" && <RefundsAdmin key={tick} token={token} tell={tell}/>}
         {section === "coupons" && <CouponsAdmin key={tick} token={token} tell={tell}/>}
+        {section === "insights" && <InsightsAdmin key={tick} token={token} tell={tell}/>}
         {section === "orders" && <Orders key={tick} token={token} tell={tell}/>}
         {section === "deliveries" && <DeliveriesAdmin key={tick} token={token} tell={tell} manageDriver={manageDriver}/>}
         {section === "shops" && <ShopsAdmin key={tick} token={token} tell={tell} manage={manageShop}/>}
@@ -139,7 +141,7 @@ const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 export function ProductModal({ product, token, close, save, tell, owner = false, onOpenExisting, initialBarcode = "" }) {
   const meta = useMeta();
-  const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isActive: product?.isActive !== false, shop: product?.shop?._id || product?.shop || "", barcode: product?.barcode || initialBarcode, sku: product?.sku || "", brand: product?.brand || "", unit: product?.unit || "", costPrice: product?.costPrice ?? "" });
+  const [form, setForm] = useState({ name: product?.name || "", description: product?.description || "", price: product?.price ?? "", comparePrice: product?.comparePrice ?? "", category: product?.category || "Other", stock: product?.stock ?? 0, sizes: product?.sizes?.join(", ") || "", isFeatured: !!product?.isFeatured, isAssured: !!product?.isAssured, isActive: product?.isActive !== false, shop: product?.shop?._id || product?.shop || "", barcode: product?.barcode || initialBarcode, sku: product?.sku || "", brand: product?.brand || "", unit: product?.unit || "", costPrice: product?.costPrice ?? "" });
   const [found, setFound] = useState(null); // result of the barcode lookup: { inShop, catalog }
   const [scanning, setScanning] = useState(false);
   const [catalogImage, setCatalogImage] = useState(""); // picture borrowed from the shared catalogue
@@ -166,6 +168,10 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
         const c = r.catalog;
         setForm((f) => ({ ...f, barcode: code, name: f.name || c.name || "", description: f.description || c.description || "", brand: f.brand || c.brand || "", unit: f.unit || c.unit || "", comparePrice: f.comparePrice === "" && c.mrp != null ? c.mrp : f.comparePrice, category: f.category === "Other" && c.category ? c.category : f.category }));
         if (c.image && !existing.length && !files.length) setCatalogImage(c.image);
+      } else if (!product && r.online && !r.catalog && !r.inShop) {
+        // a suggestion from the internet: fills only what is still empty; the shop checks it
+        const o = r.online;
+        setForm((f) => ({ ...f, barcode: code, name: f.name || o.name || "", brand: f.brand || o.brand || "", unit: f.unit || o.unit || "" }));
       }
     } catch (e) { setFound(null); if (e.status !== 400) tell(e.message, "error"); }
   };
@@ -185,7 +191,7 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
     if (!existing.length && !files.length && !catalogImage) { tell("Add at least one product image.", "error"); return; }
     setSaving(true);
     const fd = new FormData();
-    ["name", "description", "price", "stock", "category", ...(owner ? [] : ["isFeatured"]), "isActive"].forEach((k) => fd.append(k, String(form[k])));
+    ["name", "description", "price", "stock", "category", ...(owner ? [] : ["isFeatured", "isAssured"]), "isActive"].forEach((k) => fd.append(k, String(form[k])));
     if (form.comparePrice !== "") fd.append("comparePrice", String(form.comparePrice));
     ["barcode", "sku", "brand", "unit"].forEach((k) => fd.append(k, form[k].trim())); // empty = clear it
     if (owner) fd.append("costPrice", String(form.costPrice).trim());
@@ -206,7 +212,8 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
           {canScan() && <button type="button" onClick={() => setScanning(true)} className="btn-secondary shrink-0 px-3" aria-label="Scan with camera"><ScanLine size={18}/></button>}</div>
         {found?.inShop && found.inShop._id !== product?._id && <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">You already sell this: <b>{found.inShop.name}</b> ({found.inShop.stock} in stock). {onOpenExisting ? <button type="button" onClick={() => onOpenExisting(found.inShop)} className="font-bold underline">Open it instead</button> : "Edit that product instead of adding it twice."}</p>}
         {!product && found?.catalog && !found.inShop && <p className="mt-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">Found in the shared catalogue. Name, brand, category and MRP are filled in; check them and set your own price.</p>}
-        {!product && found && !found.catalog && !found.inShop && <p className="mt-2 text-xs text-slate-500">New barcode. Fill in the details once and it will be remembered for other shops.</p>}</div>
+        {!product && found?.online && !found.catalog && !found.inShop && <p className="mt-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">Found online ({found.online.source}). Name, brand and size are filled in. Please check them, add a photo and set your price.</p>}
+        {!product && found && !found.catalog && !found.inShop && !found.online && <p className="mt-2 text-xs text-slate-500">New barcode. Fill in the details once and it will be remembered for other shops.</p>}</div>
       <div className="sm:col-span-2"><label className="label">Product name</label><input className="input w-full" name="name" required value={form.name} onChange={change}/></div>
       <div className="sm:col-span-2"><label className="label">Description</label><textarea className="input w-full" rows="3" name="description" required value={form.description} onChange={change}/></div>
       <div><label className="label">Store price (₹) <span className="font-normal text-slate-400">— what customers pay</span></label><input className="input w-full" type="number" min="0" step="0.01" name="price" required value={form.price} onChange={change}/></div>
@@ -224,6 +231,7 @@ export function ProductModal({ product, token, close, save, tell, owner = false,
         {catalogImage && !files.length && <div className="mt-2 flex items-center gap-3 rounded-xl bg-emerald-50 p-2 text-sm text-emerald-900"><img src={sized(catalogImage, "sm")} alt="" className="h-14 w-14 rounded-lg object-cover"/><span className="flex-1">Using the catalogue photo. Upload your own below if you prefer.</span><button type="button" onClick={() => setCatalogImage("")} className="font-bold underline">Remove</button></div>}
         <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-300 p-3 text-sm text-slate-500"><ImagePlus size={18}/>{files.length ? `${files.length} new file(s) selected` : "Choose images (JPG, PNG, WEBP, AVIF · max 12 MB each)"}<input className="hidden" type="file" accept={IMAGE_TYPES.join(",")} multiple onChange={pickFiles}/></label></div>
       {!owner && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isFeatured" checked={form.isFeatured} onChange={change}/> Featured product</label>}
+      {!owner && <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isAssured" checked={form.isAssured} onChange={change}/> Assured (you vouch for this product; shows a badge)</label>}
       <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" name="isActive" checked={form.isActive} onChange={change}/> Active</label>
     </div>
     <div className="mt-7 flex justify-end gap-3"><button type="button" onClick={close} className="btn-secondary">Cancel</button><button disabled={saving} className="btn-primary">{saving ? "Saving..." : product ? "Save changes" : "Create product"}</button></div></form>{scanning && <ScanModal onCode={onScanned} onClose={() => setScanning(false)}/>}</div>;

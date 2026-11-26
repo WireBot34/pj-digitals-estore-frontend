@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { SignInButton, useClerk } from "@clerk/clerk-react";
-import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp } from "lucide-react";
+import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp, ShieldCheck } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { useBrand, useBusiness } from "../brand";
 import { getCoupon, quotePath, setCoupon } from "../coupon.core";
@@ -31,11 +31,21 @@ export function Home() {
   const meta = useMeta();
   const navigate = useNavigate();
   const [featured, setFeatured] = useState([]);
+  const [assured, setAssured] = useState([]);
+  const [fresh, setFresh] = useState([]);
+  const [shops, setShops] = useState([]);
   const [q, setQ] = useState("");
   const [hint, setHint] = useState(() => { try { return !localStorage.getItem("pj_hint_seen"); } catch { return false; } });
   useEffect(() => {
+    // each row loads on its own, so one slow or failing request never blanks the page
     api("/api/products" + qs({ featured: "true", limit: 8 })).then((r) => setFeatured(r.data || [])).catch(() => {});
+    api("/api/products" + qs({ assured: "true", limit: 8 })).then((r) => setAssured(r.data || [])).catch(() => {});
+    api("/api/products" + qs({ sort: "newest", limit: 8 })).then((r) => setFresh(r.data || [])).catch(() => {});
+    api("/api/shops" + qs({ limit: 6 })).then((r) => setShops(r.data || [])).catch(() => {});
   }, []);
+  // "Just added" shouldn't repeat what is already shown above it
+  const shown = new Set([...featured, ...assured].map((p) => p._id));
+  const justAdded = fresh.filter((p) => !shown.has(p._id)).slice(0, 8);
   const search = (e) => { e.preventDefault(); recentSearches.add(q); navigate("/shop" + qs({ search: q.trim() })); };
   const closeHint = () => { try { localStorage.setItem("pj_hint_seen", "1"); } catch { /* ignore */ } setHint(false); };
 
@@ -48,7 +58,7 @@ export function Home() {
           <button onClick={closeHint} aria-label="Dismiss" className="-m-1 shrink-0 p-1"><X size={16}/></button>
         </div>}
         <h1 className="max-w-2xl font-display text-[2rem] font-bold leading-[1.1] sm:text-5xl">Buy from the shops in your town.</h1>
-        <p className="mt-3 max-w-xl text-base text-slate-600 sm:mt-4 sm:text-lg">Phones, textiles and home appliances from local stores in {meta.locations.join(" and ")}, delivered to your door.</p>
+        <p className="mt-3 max-w-xl text-base text-slate-600 sm:mt-4 sm:text-lg">Everyday things from local stores in {meta.locations.join(" and ")}, delivered to your door.</p>
         <form onSubmit={search} className="mt-6 flex max-w-xl gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
@@ -70,6 +80,33 @@ export function Home() {
         <Link to="/shop" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">All products <ArrowRight size={15}/></Link>
       </div>
       <ProductGrid products={featured}/>
+    </section>}
+
+    {assured.length > 0 && <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="inline-flex items-center gap-2 font-display text-xl font-bold sm:text-2xl"><ShieldCheck size={22} className="text-green-700"/> Assured picks</h2>
+        <Link to="/shop?assured=true" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">See all <ArrowRight size={15}/></Link>
+      </div>
+      <ProductGrid products={assured}/>
+    </section>}
+
+    {justAdded.length > 0 && <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="font-display text-xl font-bold sm:text-2xl">Just added</h2>
+        <Link to="/shop" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">Browse all <ArrowRight size={15}/></Link>
+      </div>
+      <ProductGrid products={justAdded}/>
+    </section>}
+
+    {shops.length > 0 && <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="font-display text-xl font-bold sm:text-2xl">Our shops</h2>
+        <Link to="/shops" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:underline">All shops <ArrowRight size={15}/></Link>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shops.map((s) => <Link key={s._id} to={`/shop?shop=${s._id}`} className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-400">
+        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-100">{s.logo ? <img src={sized(s.logo, "sm")} alt="" loading="lazy" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center text-slate-400"><Store size={22} strokeWidth={1.5}/></div>}</div>
+        <div className="min-w-0"><div className="flex items-center gap-2"><h3 className="truncate font-semibold">{s.name}</h3><span className={cx("h-2 w-2 shrink-0 rounded-full", s.isOpen === false ? "bg-red-500" : "bg-emerald-500")} title={s.isOpen === false ? "Closed now" : "Open"}/></div>{s.location && <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500"><MapPin size={12} className="shrink-0"/>{s.location}</p>}</div>
+      </Link>)}</div>
     </section>}
 
     <RecentlyViewed className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 sm:pt-14"/>
@@ -107,6 +144,7 @@ export function ProductCard({ p }) {
         : <div className="grid h-full place-items-center text-slate-400"><Package size={32} strokeWidth={1.25}/></div>}
       {off > 0 && !out && <span className="absolute left-2 top-2 rounded bg-ink px-1.5 py-0.5 text-[11px] font-semibold text-white">{off}% off</span>}
       {out && <span className="absolute left-2 top-2 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">Sold out</span>}
+      {p.isAssured && <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-white/95 px-1.5 py-0.5 text-[11px] font-semibold text-green-700 shadow-sm"><ShieldCheck size={12}/> Assured</span>}
     </div>
     <div className="mt-2.5">
       <h3 className="line-clamp-2 text-sm font-medium leading-snug text-slate-900 sm:text-[15px]">{p.name}</h3>
@@ -159,8 +197,9 @@ function FilterSheet({ open, close, values, apply, areas, hideArea }) {
         <div><span className="label">Price (₹)</span>
           <div className="mt-1 flex items-center gap-2"><input aria-label="Minimum price" className="input w-full" inputMode="numeric" placeholder="Min" value={v.minPrice} onChange={(e) => setV({ ...v, minPrice: e.target.value.replace(/\D/g, "") })}/><span className="text-slate-400">to</span><input aria-label="Maximum price" className="input w-full" inputMode="numeric" placeholder="Max" value={v.maxPrice} onChange={(e) => setV({ ...v, maxPrice: e.target.value.replace(/\D/g, "") })}/></div></div>
         <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={v.inStock === "true"} onChange={(e) => setV({ ...v, inStock: e.target.checked ? "true" : "" })}/> Show only items in stock</label>
+        <label className="mt-3 flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={v.assured === "true"} onChange={(e) => setV({ ...v, assured: e.target.checked ? "true" : "" })}/> Assured products only</label>
       </div>
-      <div className="mt-6 flex gap-3"><button onClick={() => apply({ sort: "newest", location: "", minPrice: "", maxPrice: "", inStock: "" })} className="btn-secondary flex-1">Reset</button><button onClick={() => apply(v)} className="btn-primary flex-1">Show results</button></div>
+      <div className="mt-6 flex gap-3"><button onClick={() => apply({ sort: "newest", location: "", minPrice: "", maxPrice: "", inStock: "", assured: "" })} className="btn-secondary flex-1">Reset</button><button onClick={() => apply(v)} className="btn-primary flex-1">Show results</button></div>
     </div>
   </div>;
 }
@@ -175,10 +214,20 @@ export function Shop({ tell }) {
   const minPrice = sp.get("minPrice") || "";
   const maxPrice = sp.get("maxPrice") || "";
   const inStock = sp.get("inStock") || "";
+  const assured = sp.get("assured") || "";
   const page = Number(sp.get("page")) || 1;
   const [search, setSearch] = useState(sp.get("search") || "");
   const [focused, setFocused] = useState(false);
   const [recents, setRecents] = useState(() => recentSearches.list());
+  // product name suggestions while typing (the server forgives typos and word order)
+  const [suggestions, setSuggestions] = useState([]);
+  useEffect(() => {
+    const t = search.trim();
+    if (!focused || t.length < 2) { setSuggestions([]); return undefined; }
+    let live = true;
+    const timer = setTimeout(() => { api("/api/products/suggest" + qs({ q: t })).then((r) => live && setSuggestions(r.data || [])).catch(() => live && setSuggestions([])); }, 200);
+    return () => { live = false; clearTimeout(timer); };
+  }, [search, focused]);
   const [products, setProducts] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -213,7 +262,7 @@ export function Shop({ tell }) {
   useEffect(() => {
     let live = true;
     setLoading(true); setFailed(false);
-    api("/api/products" + qs({ page, limit: 12, search: sp.get("search"), category, sort, location, shop, minPrice, maxPrice, inStock }))
+    api("/api/products" + qs({ page, limit: 12, search: sp.get("search"), category, sort, location, shop, minPrice, maxPrice, inStock, assured }))
       .then((r) => { if (live) { setProducts(r.data || []); setPagination(r.pagination); } })
       .catch((e) => { if (live) { setFailed(true); tell(e.message, "error"); } })
       .finally(() => live && setLoading(false));
@@ -226,13 +275,14 @@ export function Shop({ tell }) {
     location && !shop && { key: "location", label: location },
     (minPrice || maxPrice) && { key: "price", label: `₹${minPrice || 0} to ${maxPrice ? "₹" + maxPrice : "any"}` },
     inStock && { key: "inStock", label: "In stock" },
+    assured && { key: "assured", label: "Assured" },
     sp.get("search") && { key: "search", label: `"${sp.get("search")}"` },
   ].filter(Boolean);
   const remove = (key) => {
     if (key === "price") setParams({ minPrice: "", maxPrice: "" });
     else { if (key === "search") setSearch(""); setParam(key, ""); }
   };
-  const filterCount = [location && !shop, minPrice || maxPrice, inStock, sort !== "newest"].filter(Boolean).length;
+  const filterCount = [location && !shop, minPrice || maxPrice, inStock, assured, sort !== "newest"].filter(Boolean).length;
   const clearAll = () => { setSearch(""); setSp(shop ? { shop } : {}, { replace: true }); };
 
   return <Page>
@@ -257,6 +307,9 @@ export function Shop({ tell }) {
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17}/>
             <input value={search} onChange={(e) => setSearch(e.target.value)} onFocus={() => { setRecents(recentSearches.list()); setFocused(true); }} onBlur={() => { setTimeout(() => setFocused(false), 150); if (search.trim()) commitSearch(search); }} onKeyDown={(e) => { if (e.key === "Enter") { e.currentTarget.blur(); } }} placeholder="Search products" aria-label="Search products" enterKeyHint="search" className="input w-full pl-10"/>
+            {focused && search.trim().length >= 2 && suggestions.length > 0 && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg" role="listbox" aria-label="Suggestions">
+              {suggestions.map((x) => <Link key={x._id} to={`/product/${x._id}`} onMouseDown={(e) => e.preventDefault()} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm hover:bg-slate-50" role="option"><span className="truncate">{x.name}</span><span className="shrink-0 text-xs text-slate-400">{x.category}</span></Link>)}
+            </div>}
             {focused && !search && recents.length > 0 && <div className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
               <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-500"><span>Recent searches</span><button onMouseDown={(e) => e.preventDefault()} onClick={() => { recentSearches.clear(); setRecents([]); }} className="font-medium hover:text-slate-900">Clear</button></div>
               {recents.map((r) => <div key={r} className="flex items-center hover:bg-slate-50"><button onMouseDown={(e) => e.preventDefault()} onClick={() => pickRecent(r)} className="flex flex-1 items-center gap-2 px-3 py-2.5 text-left text-sm"><Clock size={14} className="text-slate-400"/>{r}</button><button onMouseDown={(e) => e.preventDefault()} onClick={() => { recentSearches.remove(r); setRecents(recentSearches.list()); }} aria-label={`Remove ${r}`} className="px-3 py-2.5 text-slate-400 hover:text-slate-900"><X size={14}/></button></div>)}
@@ -271,7 +324,7 @@ export function Shop({ tell }) {
       </div>
     </div>
 
-    <FilterSheet open={sheet} close={() => setSheet(false)} hideArea={Boolean(shop)} areas={meta.locations} values={{ sort, location, minPrice, maxPrice, inStock }} apply={(v) => { setParams({ sort: v.sort === "newest" ? "" : v.sort, location: v.location, minPrice: v.minPrice, maxPrice: v.maxPrice, inStock: v.inStock }); setSheet(false); }}/>
+    <FilterSheet open={sheet} close={() => setSheet(false)} hideArea={Boolean(shop)} areas={meta.locations} values={{ sort, location, minPrice, maxPrice, inStock, assured }} apply={(v) => { setParams({ sort: v.sort === "newest" ? "" : v.sort, location: v.location, minPrice: v.minPrice, maxPrice: v.maxPrice, inStock: v.inStock, assured: v.assured }); setSheet(false); }}/>
 
     {(activeFilters.length > 0 || shop) && <div className="mt-4 flex flex-wrap items-center gap-2">
       {shop && <button onClick={() => setParam("shop", "")} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold">Showing one shop <X size={13}/></button>}
@@ -538,6 +591,7 @@ export function ProductDetail({ token, signedIn, refreshCartCount, tell }) {
       <div>
         <div className="flex items-start justify-between gap-3">
           <h1 className="font-display text-2xl font-bold leading-tight sm:text-3xl">{p.name}</h1>
+          {p.isAssured && <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-800"><ShieldCheck size={14}/> Assured: checked and vouched for by us</p>}
           <button onClick={share} aria-label="Share this product" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50"><Share2 size={18}/></button>
         </div>
         {(p.brand || p.unit) && <p className="mt-1 text-sm text-slate-500">{[p.brand, p.unit].filter(Boolean).join(" · ")}</p>}
@@ -1068,6 +1122,15 @@ function OrderTrack({ status }) {
   </ol>;
 }
 
+function RefundLine({ refund: r }) {
+  if (!r) return null;
+  const paid = money(r.paidPaise / 100), due = money(r.pendingPaise / 100);
+  const text = r.state === "pending" ? `Refund of ${due} is being processed. We will send it back to you shortly.`
+    : r.state === "paid" ? `Refund of ${paid} was sent to you${r.paidAt ? ` on ${new Date(r.paidAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}${r.reference ? ` (ref ${r.reference})` : ""}.`
+    : `${paid} refunded so far${r.pendingPaise ? `, ${due} more is being processed` : ""}${r.reference ? ` (latest ref ${r.reference})` : ""}.`;
+  return <p className="mt-2 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900" data-testid="refund-line">{text}</p>;
+}
+
 function Tracking({ orderId, token, shop }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -1161,6 +1224,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
           <div className="flex flex-wrap gap-1.5"><Pill tone={payTone(o.paymentStatus)}>{o.paymentMethod === "cod" ? "COD · " : ""}{o.paymentStatus}</Pill><Pill tone={orderTone(o.orderStatus)}>{statusLabel(meta, o.orderStatus)}</Pill></div>
         </div>
         <OrderTrack status={o.orderStatus}/>
+        <RefundLine refund={o.refund}/>
         {o.orderStatus === "cancelled" && (o.cancelledBy || o.cancelReason) && <p className="mt-2 text-xs text-slate-600">Cancelled by {o.cancelledBy === "customer" ? "you" : o.cancelledBy === "shop" ? (shopName(o) || "the shop") : "our team"}{cancelLabel(meta, o) ? <>: <b>{cancelLabel(meta, o)}</b></> : ""}{o.cancelNote ? ` (${o.cancelNote})` : ""}.</p>}
         <ul className="mt-4 space-y-3 border-t border-slate-100 pt-4">{(o.items || []).map((it, i) => <li key={i} className="flex items-center gap-3 text-sm">
           <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-200/60">{(it.image || imageOf(it.product?.images)) && <img src={sized(it.image || imageOf(it.product?.images), "sm")} loading="lazy" className="h-full w-full object-cover" alt=""/>}</div>
