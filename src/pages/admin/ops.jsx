@@ -169,7 +169,7 @@ export function SettingsAdmin({ token, tell }) {
   const save = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
-      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), codMaxAmount: Number(s.codMaxAmount) || 0, gstRegistered: !!s.gstRegistered, themeOverride: s.themeOverride || "auto", seasonDates: JSON.stringify(Object.fromEntries(Object.entries(s.dates || {}).filter(([, v]) => v?.[0] && v?.[1]))), gstin: (s.gstin || "").trim(), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, deliveryOtp: s.deliveryOtp || "cod", shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "" };
+      const body = { commissionRate: Number(s.commissionPct) / 100, taxRate: Number(s.taxPct) / 100, driverFee: Number(s.driverFee), shippingCost: Number(s.shippingCost), codMaxAmount: Number(s.codMaxAmount) || 0, gstRegistered: !!s.gstRegistered, themeOverride: s.themeOverride || "auto", seasonDates: JSON.stringify(Object.fromEntries(Object.entries(s.dates || {}).filter(([, v]) => v?.[0] && v?.[1]))), gstin: (s.gstin || "").trim(), freeShippingThreshold: Number(s.freeShippingThreshold), lowStockLevel: Number(s.lowStockLevel), allowCod: !!s.allowCod, deliveryOtp: s.deliveryOtp || "cod", shopsCanAssignDrivers: !!s.shopsCanAssignDrivers, announcement: s.announcement || "", supportPhone: s.supportPhone || "", supportEmail: s.supportEmail || "", loyaltyEnabled: !!s.loyaltyEnabled, loyaltyEarnPercent: Number(s.loyaltyEarnPercent), loyaltyMaxRedeemPercent: Number(s.loyaltyMaxRedeemPercent), loyaltyMinRedeem: Number(s.loyaltyMinRedeem) };
       await api("/api/admin/settings", { token: await token(), method: "PUT", body }); tell("Settings saved. Customers see changes within a minute."); await load();
     } catch (err) { tell(err.message, "error"); } finally { setBusy(false); }
   };
@@ -178,6 +178,15 @@ export function SettingsAdmin({ token, tell }) {
     <form onSubmit={save} className="rounded-2xl border border-slate-200 bg-white p-6"><div className="grid gap-5 sm:grid-cols-2">
       {SETTING_FIELDS.map(([k, label, hint, type, attrs]) => <Field key={k} label={label} hint={hint}><input type={type} className="input w-full" value={s[k] ?? ""} onChange={set(k)} {...attrs}/></Field>)}
       <label className="flex items-center gap-3 self-end rounded-xl bg-slate-50 p-4 text-sm font-semibold"><input type="checkbox" checked={!!s.allowCod} onChange={set("allowCod")}/> Accept cash on delivery</label>
+      <div className="rounded-xl bg-slate-50 p-4 sm:col-span-2">
+        <label className="flex items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={!!s.loyaltyEnabled} onChange={set("loyaltyEnabled")}/> Loyalty points</label>
+        <p className="mt-1 text-xs text-slate-500">Customers earn points when an order is delivered and can spend them at checkout. 1 point = ₹1 off the goods.</p>
+        {s.loyaltyEnabled && <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <Field label="Earn (% of goods)" hint="2 = ₹2 of points per ₹100"><input type="number" min="0" max="20" step="0.5" className="input w-full" value={s.loyaltyEarnPercent ?? ""} onChange={set("loyaltyEarnPercent")}/></Field>
+          <Field label="Spend up to (% of goods)" hint="Most an order can pay with points"><input type="number" min="0" max="50" className="input w-full" value={s.loyaltyMaxRedeemPercent ?? ""} onChange={set("loyaltyMaxRedeemPercent")}/></Field>
+          <Field label="Fewest points to spend"><input type="number" min="0" className="input w-full" value={s.loyaltyMinRedeem ?? ""} onChange={set("loyaltyMinRedeem")}/></Field>
+        </div>}
+      </div>
       <div><label className="label" htmlFor="s-otp">Delivery code</label><select id="s-otp" className="input mt-1 w-full" value={s.deliveryOtp || "cod"} onChange={set("deliveryOtp")}><option value="cod">Cash on delivery orders only</option><option value="all">All orders</option><option value="off">Off</option></select><p className="mt-1 text-xs text-slate-500">The customer sees a 4-digit code in the app; the delivery partner must type it to finish the delivery. An admin can still complete a delivery from Deliveries.</p></div>
       <div className="rounded-xl bg-slate-50 p-4 sm:col-span-2">
         <label className="flex items-start gap-3 text-sm font-semibold"><input className="mt-1" type="checkbox" checked={!!s.gstRegistered} onChange={set("gstRegistered")}/><span>We are registered for GST<span className="block text-xs font-normal text-slate-500">Leave this OFF until you have a GSTIN. While it is off, no GST is added to any order, whatever the rate above says, and slips say "not a tax invoice".</span></span></label>
