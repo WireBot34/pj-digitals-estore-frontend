@@ -4,6 +4,7 @@ import { SignInButton, useClerk } from "@clerk/clerk-react";
 import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp, ShieldCheck } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { useBrand, useBusiness } from "../brand";
+import { RepeatButton, RepeatOrders } from "./repeat";
 import { getCoupon, getUsePoints, quotePath, setCoupon, setUsePoints } from "../coupon.core";
 import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
@@ -1181,6 +1182,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
   const [busyId, setBusyId] = useState("");
   const [tab, setTab] = useState("all");
   const [printing, setPrinting] = useState(null);
+  const [repeatKey, setRepeatKey] = useState(0); // bumped when a new repeat order is saved
   const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const r = await api("/api/orders", { token: await token() }); setOrders(r.data || []); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -1228,6 +1230,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
   const shown = orders.filter((o) => inTab(o, tab));
   return <Page narrow>
     <PageTitle>Orders</PageTitle>
+    <RepeatOrders token={token} tell={tell} refreshCartCount={refreshCartCount} goCart={() => navigate("/cart")} reloadKey={repeatKey}/>
     {!loading && !failed && orders.length > 0 && <div className="no-scrollbar -mx-4 mb-5 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Filter orders">
       {TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={chip(tab === k)}>{label} <span className={tab === k ? "text-white/70" : "text-slate-400"}>{orders.filter((o) => inTab(o, k)).length}</span></button>)}
     </div>}
@@ -1256,6 +1259,7 @@ export function Orders({ token, signedIn, refreshCartCount, tell }) {
           {canCancel && <button disabled={busyId === o._id} onClick={() => setCancelling(o)} className="btn-secondary px-4 py-2">Cancel order</button>}
           {o.orderStatus !== "cancelled" && <button onClick={() => setTracking(tracking === o._id ? null : o._id)} className="btn-secondary px-4 py-2">{tracking === o._id ? "Hide details" : "Delivery details"}</button>}
           <button disabled={busyId === o._id} onClick={() => reorder(o)} className="btn-secondary px-4 py-2"><RotateCcw size={15}/> Order again</button>
+          {o.orderStatus === "delivered" && <RepeatButton order={o} token={token} tell={tell} onSaved={() => setRepeatKey((k) => k + 1)}/>}
           {o.orderStatus === "delivered"
             ? <button disabled={busyId === o._id} onClick={() => invoice(o)} className="btn-secondary px-4 py-2"><Printer size={15}/> Invoice</button>
             : <button onClick={() => setPrinting(o)} className="btn-secondary px-4 py-2"><Printer size={15}/> Order slip</button>}
