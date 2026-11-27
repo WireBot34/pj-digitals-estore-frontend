@@ -4,7 +4,7 @@ import { SignInButton, useClerk } from "@clerk/clerk-react";
 import { ArrowRight, Bell, Check, ChevronLeft, ChevronRight, Clock, Download, Edit3, Heart, LifeBuoy, MapPin, Minus, Package, Phone, Plus, Printer, RotateCcw, Search, Share2, ShoppingBag, SlidersHorizontal, Store, Trash2, Truck, UserRound, X, Camera, ThumbsUp, ShieldCheck } from "lucide-react";
 import { api, imageOf, money, qs, sized } from "../api";
 import { useBrand, useBusiness } from "../brand";
-import { getCoupon, quotePath, setCoupon } from "../coupon.core";
+import { getCoupon, getUsePoints, quotePath, setCoupon, setUsePoints } from "../coupon.core";
 import { cancelLabel, useMeta, statusLabel } from "../meta";
 import { payForCheckout, paymentErrorMessage } from "../razorpay";
 import { AdHero, AdStrip } from "../ads";
@@ -732,7 +732,7 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const t = await token(); const [r, q] = await Promise.all([api("/api/cart", { token: t }), api(quotePath({ coupon: getCoupon() }), { token: t }).catch(() => null)]); setCart(r.cart || r.data); setQuote(q?.data || null); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
+  const load = useCallback(async () => { if (!signedIn) { setLoading(false); return; } setFailed(false); try { const t = await token(); const [r, q] = await Promise.all([api("/api/cart", { token: t }), api(quotePath({ coupon: getCoupon(), points: getUsePoints() }), { token: t }).catch(() => null)]); setCart(r.cart || r.data); setQuote(q?.data || null); } catch (e) { setFailed(true); tell(e.message, "error"); } finally { setLoading(false); } }, [signedIn, token, tell]);
   useEffect(() => { load(); }, [load]);
   const idOf = (item) => item.product?._id || item.product;
   const update = async (item, quantity) => { try { await api(`/api/cart/item/${idOf(item)}`, { token: await token(), method: "PUT", body: { quantity, size: item.size } }); await load(); await refreshCartCount(); } catch (e) { tell(e.message, "error"); } };
@@ -771,7 +771,8 @@ export function Cart({ token, signedIn, refreshCartCount, tell }) {
                 <dl className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
                   <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.delivery?.location ? ` to ${quote.delivery.location}` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added when you order</span>}</dd></div>
-                  {quote?.summary.discount > 0 && <div className="flex justify-between text-green-700"><dt>Coupon {quote.coupon?.code}</dt><dd className="price font-medium">−{money(quote.summary.discount)}</dd></div>}
+                  {quote?.coupon && quote.summary.discount - (quote.loyalty?.applied || 0) > 0 && <div className="flex justify-between text-green-700"><dt>Coupon {quote.coupon.code}</dt><dd className="price font-medium">−{money(quote.summary.discount - (quote.loyalty?.applied || 0))}</dd></div>}
+          {quote?.loyalty?.applied > 0 && <div className="flex justify-between text-green-700"><dt>Points used</dt><dd className="price font-medium">−{money(quote.loyalty.applied)}</dd></div>}
                   {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
                 </dl>
                 <div className="my-4 border-t border-slate-200"/>
@@ -878,7 +879,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     setFailed(false);
     try {
       const t = await token();
-      const [c, a, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/address", { token: t }), api(quotePath({ coupon: getCoupon() }), { token: t }).catch(() => null)]);
+      const [c, a, q] = await Promise.all([api("/api/cart", { token: t }), api("/api/address", { token: t }), api(quotePath({ coupon: getCoupon(), points: getUsePoints() }), { token: t }).catch(() => null)]);
       setCart(c.cart || c.data);
       setQuote(q?.data || null);
       const list = Array.isArray(a.data) ? a.data : [];
@@ -894,10 +895,10 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     if (quoted.current === "") { quoted.current = addressId || "-"; return; } // the first quote came with the page
     if (quoted.current === (addressId || "-")) return;
     quoted.current = addressId || "-";
-    (async () => { try { const q = await api(quotePath({ addressId, coupon: getCoupon() }), { token: await token() }); setQuote(q?.data || null); } catch { /* keep the last quote; the server re-checks when the order is placed */ } })();
+    (async () => { try { const q = await api(quotePath({ addressId, coupon: getCoupon(), points: getUsePoints() }), { token: await token() }); setQuote(q?.data || null); } catch { /* keep the last quote; the server re-checks when the order is placed */ } })();
   }, [addressId, signedIn, loading, token]);
 
-  const reloadQuote = async () => { try { const q = await api(quotePath({ addressId, coupon: getCoupon() }), { token: await token() }); setQuote(q?.data || null); } catch { /* the server re-checks when the order is placed */ } };
+  const reloadQuote = async () => { try { const q = await api(quotePath({ addressId, coupon: getCoupon(), points: getUsePoints() }), { token: await token() }); setQuote(q?.data || null); } catch { /* the server re-checks when the order is placed */ } };
 
   // fill in what the account already knows
   useEffect(() => {
@@ -923,7 +924,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
     try {
       const t = await token();
       if (!attemptKey.current) attemptKey.current = newAttemptKey();
-      const body = { paymentMethod: payment, notes: notes || undefined, idempotencyKey: attemptKey.current, couponCode: quote?.coupon?.code || undefined };
+      const body = { paymentMethod: payment, notes: notes || undefined, idempotencyKey: attemptKey.current, couponCode: quote?.coupon?.code || undefined, usePoints: quote?.loyalty?.applied > 0 || undefined };
       if (addressId) {
         body.addressId = addressId;
       } else {
@@ -938,7 +939,7 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
 
       const placed = await api("/api/orders", { token: t, method: "POST", body });
       attemptKey.current = null; // placed: the next checkout is a new attempt
-      setCoupon(""); // a coupon is used up with the order
+      setCoupon(""); setUsePoints(false); // a coupon is used up with the order; points are asked for again next time
       await refreshCartCount();
 
       let paid = false;
@@ -1008,10 +1009,12 @@ export function Checkout({ token, signedIn, user, refreshCartCount, tell }) {
         : <ul className="mt-4 space-y-2.5">{items.map((it, i) => <li key={i} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{it.product?.name || "Product"} <span className="text-slate-400">× {it.quantity}</span></span><span className="price shrink-0 font-medium">{money(it.price * it.quantity)}</span></li>)}</ul>}
         <div className="my-4 border-t border-slate-200"/>
         <CouponBox quote={quote} onChange={reloadQuote}/>
+        <PointsBox loyalty={quote?.loyalty} onChange={reloadQuote}/>
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between"><dt className="text-slate-600">Subtotal</dt><dd className="price font-medium">{money(quote ? quote.summary.subtotal : cart.totalAmount)}</dd></div>
           <div className="flex justify-between"><dt className="text-slate-600">Delivery{quote?.delivery?.location ? ` to ${quote.delivery.location}` : ""}</dt><dd className="price font-medium">{quote ? feeText(quote.summary.shippingCost) : <span className="text-slate-500">Added on your order slip</span>}</dd></div>
-          {quote?.summary.discount > 0 && <div className="flex justify-between text-green-700"><dt>Coupon {quote.coupon?.code}</dt><dd className="price font-medium">−{money(quote.summary.discount)}</dd></div>}
+          {quote?.coupon && quote.summary.discount - (quote.loyalty?.applied || 0) > 0 && <div className="flex justify-between text-green-700"><dt>Coupon {quote.coupon.code}</dt><dd className="price font-medium">−{money(quote.summary.discount - (quote.loyalty?.applied || 0))}</dd></div>}
+          {quote?.loyalty?.applied > 0 && <div className="flex justify-between text-green-700"><dt>Points used</dt><dd className="price font-medium">−{money(quote.loyalty.applied)}</dd></div>}
           {quote?.summary.tax > 0 && <div className="flex justify-between"><dt className="text-slate-600">GST</dt><dd className="price font-medium">{money(quote.summary.tax)}</dd></div>}
           <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><dt>{payment === "cod" ? "Pay in cash" : "Total"}</dt><dd className="price">{money(total)}</dd></div>
           <div className="flex justify-between"><dt className="text-slate-600">Pay by</dt><dd className="font-medium">{payment === "cod" ? "Cash on delivery" : "Online"}</dd></div>
@@ -1037,6 +1040,19 @@ function CouponBox({ quote, onChange }) {
     <div className="flex gap-2"><input className="input min-w-0 flex-1 uppercase" value={code} onChange={(e) => setCode(e.target.value)} maxLength={20} placeholder="Coupon code" aria-label="Coupon code"/><button className="btn-secondary px-3 py-2 text-sm" disabled={!code.trim()}>Apply</button></div>
     {quote?.couponError && <p className="mt-1.5 text-xs text-red-700" role="alert">{quote.couponError}</p>}
   </form>;
+}
+
+/* ------------------------------------------------------------ Loyalty points */
+/** Shows the balance and a "use points" tick. The server works out how many points can be spent. */
+function PointsBox({ loyalty: l, onChange }) {
+  if (!l?.enabled || (l.balance <= 0 && !(l.willEarn > 0))) return null;
+  const toggle = (e) => { setUsePoints(e.target.checked); onChange(); };
+  return <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900" data-testid="points-box">
+    {l.usable > 0
+      ? <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={l.applied > 0} onChange={toggle}/><span>Use <b>{l.usable} points</b> and save <b>{money(l.usable)}</b> <span className="text-amber-700">(you have {l.balance})</span></span></label>
+      : l.balance > 0 ? <p>You have <b>{l.balance} points</b>. They can be used once an order allows at least {l.minRedeem}.</p> : null}
+    {l.willEarn > 0 && <p className={l.balance > 0 ? "mt-1 text-xs text-amber-700" : "text-xs"}>You will earn <b>{l.willEarn} points</b> when this order is delivered.</p>}
+  </div>;
 }
 
 /* ------------------------------------------------------------ Order slip */
