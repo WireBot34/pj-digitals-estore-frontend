@@ -37,7 +37,7 @@ export function RefundsAdmin({ token, tell }) {
   const start = (o) => setForm({ order: o._id, orderNumber: o.orderNumber, amount: "", reason: "cancelled", note: "", total: o.totalAmount });
   const create = async (e) => {
     e.preventDefault();
-    if (await call("/api/admin/refunds", "POST", { order: form.order, orderNumber: form.order ? undefined : form.orderNumber, amount: form.amount, reason: form.reason, note: form.note }, "Refund added. Pay it back, then mark it paid.")) setForm(null);
+    if (await call("/api/admin/refunds", "POST", { order: form.order, orderNumber: form.order ? undefined : form.orderNumber, amount: form.amount, reason: form.reason, note: form.note, chargeShop: !!form.chargeShop }, "Refund added. Pay it back, then mark it paid.")) setForm(null);
   };
   const markPaid = async (e) => {
     e.preventDefault();
@@ -59,7 +59,7 @@ export function RefundsAdmin({ token, tell }) {
         </Table></div>}
       {pending.length > 0 && <div><h3 className="mb-2 text-sm font-bold text-slate-700">Waiting to be paid back</h3>
         <Table head={["Order", "Amount", "Reason", "Added", "Actions"]} min={640}>
-          {pending.map((r) => <tr key={r._id}><td className="px-5 py-3 font-bold">{r.orderNumber}</td><td className="px-5 py-3 font-bold">{inr(r.amount)}</td><td className="px-5 py-3">{reasonOf(r.reason)}{r.note ? <span className="block text-xs text-slate-500">{r.note}</span> : null}</td><td className="px-5 py-3">{when(r.createdAt)}</td>
+          {pending.map((r) => <tr key={r._id}><td className="px-5 py-3 font-bold">{r.orderNumber}</td><td className="px-5 py-3 font-bold">{inr(r.amount)}</td><td className="px-5 py-3">{reasonOf(r.reason)}{r.chargeShop ? <span className="ml-1 text-xs font-semibold text-amber-700">· shop pays</span> : null}{r.note ? <span className="block text-xs text-slate-500">{r.note}</span> : null}</td><td className="px-5 py-3">{when(r.createdAt)}</td>
             <td className="px-5 py-3 text-right"><span className="inline-flex gap-2"><button disabled={busy} className="btn-primary px-3 py-1.5 text-xs" onClick={() => setPaying({ id: r._id, reference: "", amount: r.amount, order: r.orderNumber })}>Mark paid</button><button disabled={busy} className="btn-secondary px-3 py-1.5 text-xs" onClick={() => call(`/api/admin/refunds/${r._id}/cancel`, "PUT", undefined, "Refund cancelled.")}>Cancel</button></span></td></tr>)}
         </Table></div>}
     </>}
@@ -88,6 +88,7 @@ export function RefundsAdmin({ token, tell }) {
         <Field label="Amount (₹)"><input className="input w-full" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder={form.total ? `up to ${form.total}` : "whole amount"} aria-label="Refund amount"/></Field>
         <Field label="Reason"><select className="input w-full" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })}>{data.reasons.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
         <Field label="Note (optional)"><input className="input w-full" maxLength={300} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })}/></Field>
+        <label className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-sm"><input type="checkbox" className="mt-1" checked={!!form.chargeShop} onChange={(e) => setForm({ ...form, chargeShop: e.target.checked })}/><span>The shop was at fault: take its share from its next payout<span className="block text-xs text-slate-500">Only for delivered orders of a shop. The shop gives back the goods part (after our commission), not delivery or tax.</span></span></label>
         <button disabled={busy || !form.orderNumber.trim()} className="btn-primary w-full"><Check size={16}/> Add refund</button>
       </form></Modal>}
     {paying && <Modal title={`Mark ${inr(paying.amount)} refund as paid`} subtitle={`Order ${paying.order}. Pay the customer first, then enter the UPI / bank reference.`} close={() => setPaying(null)}>

@@ -58,7 +58,9 @@ export function SettleModal({ shopId, token, tell, close, done }) {
   };
   return <Modal wide title="Review settlement" subtitle="Creates a pending payout for every delivered + paid order not yet settled." close={close}>
     {!p ? <Loading/> : !p.ordersCount ? <p className="text-sm text-slate-500">No unsettled orders.</p> : <>
-      <div className="grid gap-3 sm:grid-cols-4 text-sm"><Stat label="Orders" value={p.ordersCount}/><Stat label="Sales" value={rupees(p.grossSales)} hint={`COD ${rupees(p.codAmount)} · online ${rupees(p.onlineAmount)}`}/><Stat label={`Commission (${pct(p.rate)})`} value={`− ${rupees(p.commission)}`}/><Stat label="Net payable" value={rupees(p.net + adj)} tone="green"/></div>
+      <div className="grid gap-3 sm:grid-cols-4 text-sm"><Stat label="Orders" value={p.ordersCount}/><Stat label="Sales" value={rupees(p.grossSales)} hint={`COD ${rupees(p.codAmount)} · online ${rupees(p.onlineAmount)}`}/><Stat label={`Commission (${pct(p.rate)})`} value={`− ${rupees(p.commission)}`}/><Stat label="Net payable" value={rupees(p.net - (p.chargesApplied || 0) + adj)} tone="green"/></div>
+      {p.charges?.length > 0 && <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900" data-testid="charges"><p className="font-bold">Refunds the shop gives back: − {rupees(p.chargesApplied)}</p>
+        <ul className="mt-1 space-y-0.5 text-xs">{p.charges.map((c) => <li key={c._id}>{c.orderNumber} · {rupees(c.amount)} {c.fits ? "" : "· does not fit this payout, waits for the next one"}</li>)}</ul></div>}
       <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Send money to</p><p className="mt-1 font-semibold">{p.payoutLabel || "⚠ The shop hasn't added a payout account yet."}</p></div>
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
         <Field label="Commission override (%)" hint="Empty = shop / platform rate"><input type="number" min="0" max="99" step="0.1" className="input w-full" value={f.commissionPct} onChange={(e) => setF({ ...f, commissionPct: e.target.value })}/></Field>
@@ -66,7 +68,7 @@ export function SettleModal({ shopId, token, tell, close, done }) {
         <Field label="Adjustment reason"><input className="input w-full" value={f.adjustmentNote} onChange={(e) => setF({ ...f, adjustmentNote: e.target.value })}/></Field></div>
       <Field className="mt-4" label="Notes"><input className="input w-full" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })}/></Field>
       <details className="mt-4 text-sm"><summary className="cursor-pointer font-bold text-indigo-600">Show the {p.orders.length} orders</summary><div className="mt-2 max-h-48 space-y-1 overflow-y-auto">{p.orders.map((o) => <div key={o._id} className="flex justify-between text-xs"><span>{o.orderNumber} · {day(o.deliveredAt)}</span><span>{rupees(o.subtotal)} {o.paymentMethod === "cod" ? "· COD" : ""}</span></div>)}</div></details>
-      <div className="mt-6 flex justify-end gap-3"><button onClick={close} className="btn-secondary">Cancel</button><button disabled={busy || p.net + adj < 0} onClick={submit} className="btn-primary">{busy ? "Creating..." : "Create settlement"}</button></div></>}
+      <div className="mt-6 flex justify-end gap-3"><button onClick={close} className="btn-secondary">Cancel</button><button disabled={busy || p.net - (p.chargesApplied || 0) + adj < 0} onClick={submit} className="btn-primary">{busy ? "Creating..." : "Create settlement"}</button></div></>}
   </Modal>;
 }
 
@@ -89,7 +91,7 @@ function Settlements({ token, tell }) {
     <Pager pagination={pagination} onPage={setPage}/>
     {paying && <PayModal s={paying} token={token} tell={tell} close={() => setPaying(null)} done={() => { setPaying(null); reload(); }}/>}
     {detail && <Modal wide title={`${detail.shop?.name} settlement`} subtitle={`${detail.ordersCount} orders · ${pct(detail.commissionRate)} commission`} close={() => setDetail(null)}>
-      <div className="grid gap-3 sm:grid-cols-4"><Stat label="Sales" value={rupees(detail.grossSales)}/><Stat label="Commission" value={rupees(detail.commission)}/><Stat label="Adjustment" value={rupees(detail.adjustment)} hint={detail.adjustmentNote}/><Stat label="Net" value={rupees(detail.netPayable)} tone="green"/></div>
+      <div className="grid gap-3 sm:grid-cols-4"><Stat label="Sales" value={rupees(detail.grossSales)}/><Stat label="Commission" value={rupees(detail.commission)}/><Stat label="Adjustment" value={rupees(detail.adjustment)} hint={[detail.adjustmentNote, detail.refundDeduction ? `Refunds taken back: −${rupees(detail.refundDeduction)}` : ""].filter(Boolean).join(" · ") || undefined}/><Stat label="Net" value={rupees(detail.netPayable)} tone="green"/></div>
       {detail.payoutSnapshot && <p className="mt-3 text-sm text-slate-600"><b>Send to:</b> {detail.payoutSnapshot}</p>}{detail.notes && <p className="mt-1 text-sm text-slate-500">{detail.notes}</p>}
       <div className="mt-4 max-h-64 space-y-1 overflow-y-auto text-sm">{(detail.orders || []).map((o) => <div key={o._id} className="flex justify-between"><span>{o.orderNumber} · {day(o.deliveredAt)}</span><span>{rupees(o.subtotal)}{o.paymentMethod === "cod" ? " · COD" : ""}</span></div>)}</div></Modal>}
   </>;
